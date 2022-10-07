@@ -3,3 +3,10 @@ exps/*
 nohup.out
 *pyc
 __pycache__ 
+__MACOSX/exps/._.DS_Store
+__MACOSX/exps/classifier/._.DS_Store
+__MACOSX/exps/models/._.DS_Store
+__MACOSX/._exps
+.vscode/launch.json
+.vscode/settings.json
+exps.zip
