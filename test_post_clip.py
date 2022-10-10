@@ -440,11 +440,11 @@ def main():
             logging.info("Cls score for class {}, total labels {} is: {}".format(category_name, total_labels, acc))
             count = count + 1
         acc = 100*accuracy_score(query_labels, pred_labels)
-        logging.info("Cls score is: {}".format(acc))   
+        logging.info("Cls score is: {}".format(acc))
     elif args.experiment_mode == "save_voxel_on_query":
         save_path = args.vis_gen_dir
         if not os.path.exists(save_path):
-            os.makedirs(save_path) 
+            os.makedirs(save_path)
         torch.multiprocessing.set_sharing_strategy('file_system')
         if args.text_query is None:
             logging.info("Please add text query using text_query args argument")
