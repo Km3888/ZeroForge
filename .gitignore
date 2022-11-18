@@ -47,3 +47,9 @@ rotated_car_out_2d_2.png
 rotated_car_out_2d_3.png
 img1.png
 car_voxel_file.png
+*/sample_*.png
+*.tfevents.*
+an airplane_out_2d_final.png
+axis=0.png
+axis=1.png
+axis=2.png
