@@ -77,7 +77,7 @@ class Transform():
     def resample(self, volume, indices_rotated):
 
         if volume.is_cuda:
-            indices_rotated = indices_rotated.to('cuda')
+            indices_rotated = indices_rotated.to(volume.device)
 
         indices_rotated = indices_rotated.permute(0, 2, 3, 4, 1)
 
