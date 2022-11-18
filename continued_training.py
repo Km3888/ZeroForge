@@ -27,7 +27,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 import PIL
 
-writer = SummaryWriter()
+
 
 def clip_loss(query,args,clip_model,autoencoder,latent_flow_model,renderer,rotation,resizer,iter):
     text_emb,ims = generate_on_train_query(args,clip_model,autoencoder,latent_flow_model,renderer,query,args.batch_size,rotation,resizer,iter)
@@ -201,9 +201,7 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     
     print(losses)
             
-def main():
-    args=get_local_parser()
-    
+def main(args):
     device, gpu_array = helper.get_device(args)
     args.device = device
     
@@ -227,4 +225,6 @@ def main():
     print('xx')
 
 if __name__=="__main__":
-    main()
+    args=get_local_parser()
+    writer=SummaryWriter(comment='_%s'%args.text_query)
+    main(args)
