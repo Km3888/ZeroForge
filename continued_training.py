@@ -30,7 +30,7 @@ import PIL
 writer = SummaryWriter()
 
 def clip_loss(query,args,clip_model,autoencoder,latent_flow_model,renderer,rotation,resizer,iter):
-    text_emb,ims,hard_ims =generate_on_train_query(args,clip_model,autoencoder,latent_flow_model,renderer,query,32,rotation,resizer,iter)
+    text_emb,ims,hard_ims =generate_on_train_query(args,clip_model,autoencoder,latent_flow_model,renderer,query,args.batch_size,rotation,resizer,iter)
     
     im_embs=clip_model.encode_image(ims)
     losses=-1*torch.cosine_similarity(text_emb,im_embs)
@@ -90,35 +90,46 @@ def generate_on_train_query(args,clip_model,autoencoder,latent_flow_model,render
     out_3d = autoencoder.decoding(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size).to(args.device)
     out_3d_soft = torch.sigmoid(100*(out_3d-args.threshold))
     
-    out_3d_hard = out_3d.detach() > args.threshold
+    if not iter%10:
+        out_3d_hard = out_3d.detach() > args.threshold
+        rgbs_hard = []
+        for i in range(batch_size):
+            rand_rotate_i = transform.rotate_random(out_3d_soft[i].float().unsqueeze(0).unsqueeze(0))
+            rand_rotate_i_hard = transform.rotate_random(out_3d_hard[i].float().unsqueeze(0).unsqueeze(0))
+            for axis in range(3):
+                out_2d_i_hard = renderer.render(volume=rand_rotate_i_hard.squeeze(),axis=axis).double()
+                
+                rgb_i_hard = resize_transform(out_2d_i_hard.unsqueeze(0).unsqueeze(0).expand(-1,3,-1,-1))
+                
+                rgbs_hard.append(rgb_i_hard)
     
-    if not iter%20:
-        voxel_render_loss = -1* evaluate_true_voxel(out_3d[0],args,clip_model,text_features,iter,text_in)
+        rgbs_hard = torch.cat(rgbs_hard,0)
+        hard_im_embeddings = clip_model.encode_image(rgbs_hard)
+        hard_loss = -1*torch.cosine_similarity(text_features,hard_im_embeddings)
+        #write to tensorboard
+        writer.add_scalar('Loss/hard_loss', hard_loss, iter)
+        voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard[0],args,clip_model,text_features,iter,text_in)
         writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
+        
     # out_3d_soft = out_3d_soft.unsqueeze(0)
     resize_transform = resizer
     rgbs = []
-    rgbs_hard = []
     for i in range(batch_size):
         rand_rotate_i = transform.rotate_random(out_3d_soft[i].float().unsqueeze(0).unsqueeze(0))
-        rand_rotate_i_hard = transform.rotate_random(out_3d_hard[i].float().unsqueeze(0).unsqueeze(0))
         for axis in range(3):
             out_2d_i = renderer.render(volume=rand_rotate_i.squeeze(),axis=axis).double()
-            out_2d_i_hard = renderer.render(volume=rand_rotate_i_hard.squeeze(),axis=axis).double()
             
             rgb_i = resize_transform(out_2d_i.unsqueeze(0).unsqueeze(0).expand(-1,3,-1,-1))
-            rgb_i_hard = resize_transform(out_2d_i_hard.unsqueeze(0).unsqueeze(0).expand(-1,3,-1,-1))
-        rgbs.append(rgb_i)
-        rgbs_hard.append(rgb_i_hard)
+            
+            rgbs.append(rgb_i)
     
-    rgbs_hard = torch.cat(rgbs_hard,0)
     rgbs = torch.cat(rgbs,0)
     
     # clip_embs = clip_model.encode_image(rgbs)
             
     # save_image(out_2d_1, "rotated_car_out_2d_1.png")
     
-    return text_features,rgbs,rgbs_hard
+    return text_features,rgbs
     
 
 def evaluate_true_voxel(out_3d,args,clip_model,text_features,i,text):
