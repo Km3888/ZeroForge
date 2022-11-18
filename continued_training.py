@@ -93,7 +93,8 @@ def generate_on_train_query(args,clip_model,autoencoder,latent_flow_model,render
     out_3d_hard = out_3d.detach() > args.threshold
     
     if not iter%20:
-        evaluate_true_voxel(out_3d[0],args,clip_model,text_features,iter,text_in)
+        voxel_render_loss = -1* evaluate_true_voxel(out_3d[0],args,clip_model,text_features,iter,text_in)
+        writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
     # out_3d_soft = out_3d_soft.unsqueeze(0)
     resize_transform = resizer
     rgbs = []
