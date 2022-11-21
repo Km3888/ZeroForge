@@ -29,10 +29,9 @@ import PIL
 
 
 
-def clip_loss(args,clip_model,autoencoder,latent_flow_model,renderer,rotation,resizer,iter):
+def clip_loss(args,query_array,clip_model,autoencoder,latent_flow_model,renderer,rotation,resizer,iter):
     # text_emb,ims = generate_single_query(args,clip_model,autoencoder,latent_flow_model,renderer,query,args.batch_size,rotation,resizer,iter)
     
-    query_array = ['wineglass','spoon','fork','knife','screwdriver','hammer']
     text_embs,ims = generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,renderer,query_array,rotation,resizer,iter)
     
     im_embs=clip_model.encode_image(ims)
@@ -106,7 +105,7 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
     decoder_embs = latent_flow_model.sample(batch_size, noise=noise, cond_inputs=text_features)
 
     out_3d = autoencoder.decoding(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size).to(args.device)
-    out_3d_soft = torch.sigmoid(100*(out_3d-args.threshold))
+    out_3d_soft = torch.sigmoid(args.beta*(out_3d-args.threshold))
    
     if not iter%10:
         out_3d_hard = out_3d.detach() > args.threshold
@@ -151,72 +150,14 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
     # save_image(out_2d_1, "rotated_car_out_2d_1.png")
     
     return text_features,rgbs
-
-
-def generate_single_query(args,clip_model,autoencoder,latent_flow_model,renderer,text_in,batch_size,rotation,resizer,iter):
-    clip_model.eval()
-    autoencoder.train()
-    latent_flow_model.train()
-    voxel_size = 32
-    shape = (voxel_size, voxel_size, voxel_size)
-    p = visualization.make_3d_grid([-0.5] * 3, [+0.5] * 3, shape).type(torch.FloatTensor).to(args.device)
-    query_points = p.expand(batch_size, *p.size())
-        
-    text = clip.tokenize([text_in]).to(args.device)
-    text_features = clip_model.encode_text(text)
-    text_features = text_features / text_features.norm(dim=-1, keepdim=True)
-    
-    noise = torch.Tensor(batch_size, args.emb_dims).normal_().to(args.device)
-    decoder_embs = latent_flow_model.sample(batch_size, noise=noise, cond_inputs=text_features.repeat(batch_size,1))
-
-    out_3d = autoencoder.decoding(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size).to(args.device)
-    out_3d_soft = torch.sigmoid(args.beta*(out_3d-args.threshold))
-        
-    if not iter%10:
-        out_3d_hard = out_3d.detach() > args.threshold
-        rgbs_hard = []
-        for i in range(batch_size):
-            rand_rotate_i_hard =  rotation.rotate_random(out_3d_hard[i].float().unsqueeze(0).unsqueeze(0))
-            for axis in range(3):
-                out_2d_i_hard = renderer.render(volume=rand_rotate_i_hard.squeeze(),axis=axis).double()                
-                rgbs_hard.append(out_2d_i_hard.unsqueeze(0))
-    
-        rgbs_hard = torch.cat(rgbs_hard,0)
-        rgbs_hard = rgbs_hard.unsqueeze(1).expand(-1,3,-1,-1)
-        rgbs_hard = resizer(rgbs_hard)
-        
-        hard_im_embeddings = clip_model.encode_image(rgbs_hard)
-        hard_loss = -1*torch.cosine_similarity(text_features,hard_im_embeddings).mean()
-        #write to tensorboard
-        voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard[0],args,clip_model,text_features,iter,text_in)
-        if args.use_tensorboard:
-            writer.add_scalar('Loss/hard_loss', hard_loss, iter)
-            writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)        
-    # out_3d_soft = out_3d_soft.unsqueeze(0)
-    
-    rgbs = []
-    for i in range(batch_size):
-        rand_rotate_i =  rotation.rotate_random(out_3d_soft[i].float().unsqueeze(0).unsqueeze(0))
-        for axis in range(3):
-            out_2d_i = renderer.render(volume=rand_rotate_i.squeeze(),axis=axis).double()            
-            rgbs.append(out_2d_i.unsqueeze(0))
-    
-    rgbs = torch.cat(rgbs,0)
-    rgbs = rgbs.unsqueeze(1).expand(-1,3,-1,-1)
-    rgbs =  resizer(rgbs)
-    
-    # clip_embs = clip_model.encode_image(rgbs)
-    # save_image(out_2d_1, "rotated_car_out_2d_1.png")
-    
-    return text_features,rgbs
     
 
 def evaluate_true_voxel(out_3d,args,clip_model,text_features,i,text):
     # code for saving the "true" voxel image, not useful right now
     out_3d_hard = out_3d>args.threshold
-    voxel_save(out_3d_hard.squeeze().cpu().detach(), None, out_file='%s/sample_%s.png' % (text,i))
+    voxel_save(out_3d_hard.squeeze().cpu().detach(), None, out_file='%s/sample_%s.png' % (args.query_array,i))
     # load the image that was saved and transform it to a tensor
-    voxel_im = PIL.Image.open('%s/sample_%s.png' % (text,i)).convert('RGB')
+    voxel_im = PIL.Image.open('%s/sample_%s.png' % (args.query_array,i)).convert('RGB')
     voxel_tensor = T.ToTensor()(voxel_im)
     if args.use_tensorboard:
         writer.add_image('voxel image', voxel_tensor, i)
@@ -247,16 +188,14 @@ def get_local_parser(mode="args"):
     parser.add_argument("--beta",  type=float, default=25, help='regularization coefficient')
     parser.add_argument("--learning_rate",  type=float, default=01e-06, help='learning rate') #careful, base parser has "lr" param with different default value
     parser.add_argument("--use_tensorboard",  type=bool, default=True, help='use tensorboard')
+    parser.add_argument("--query_array",  type=str, default=None, help='use tensorboard')
     if mode == "args":
         args = parser.parse_args()
         return args
     else:
         return parser
 
-def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
-    sample_query = args.text_query
-    
-    assert len(sample_query)
+def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):    
     rotation = dt.Transform(args.device)
     resizer = T.Resize(224)
     flow_optimizer=optim.Adam(latent_flow_model.parameters(), lr=args.learning_rate)
@@ -264,15 +203,16 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     
     losses = []
     
+    query_array = query_arrays[args.query_array]
     # make directory for saving images with name of the text query using os.makedirs
-    if not os.path.exists(sample_query):
-        os.makedirs(sample_query)
+    if not os.path.exists(args.query_array):
+        os.makedirs(args.query_array)
 
     for iter in range(5000):
         flow_optimizer.zero_grad()
         net_optimizer.zero_grad()
         
-        loss =clip_loss(args,clip_model,autoencoder,latent_flow_model,renderer,rotation,resizer,iter)        
+        loss =clip_loss(args,query_array,clip_model,autoencoder,latent_flow_model,renderer,rotation,resizer,iter)        
         
         loss.backward()
                 
@@ -309,8 +249,15 @@ def main(args):
     
     print('xx')
 
+query_arrays = {"wineglass": ["wineglass"],
+                "spoon": ["spoon"],
+                "fork": ["fork"],
+                "hammer": ["hammer"],
+                "six": ["wineglass','spoon','fork','knife','screwdriver','hammer"],
+}
+
 if __name__=="__main__":
     args=get_local_parser()
     if args.use_tensorboard:
-        writer=SummaryWriter(comment='_%s_lr=%s_beta=%s_gpu=%s'% (args.text_query,args.learning_rate,args.beta,args.gpu[0]))
+        writer=SummaryWriter(comment='_%s_lr=%s_beta=%s_gpu=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0]))
     main(args)
