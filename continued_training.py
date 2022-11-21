@@ -29,17 +29,25 @@ import PIL
 
 
 
-def clip_loss(query,args,clip_model,autoencoder,latent_flow_model,renderer,rotation,resizer,iter):
-    text_emb,ims = generate_on_train_query(args,clip_model,autoencoder,latent_flow_model,renderer,query,args.batch_size,rotation,resizer,iter)
+def clip_loss(args,clip_model,autoencoder,latent_flow_model,renderer,rotation,resizer,iter):
+    # text_emb,ims = generate_single_query(args,clip_model,autoencoder,latent_flow_model,renderer,query,args.batch_size,rotation,resizer,iter)
+    
+    query_array = ['wineglass','spoon','fork','knife','screwdriver','hammer']
+    text_embs,ims = generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,renderer,query_array,rotation,resizer,iter)
     
     im_embs=clip_model.encode_image(ims)
-    losses=-1*torch.cosine_similarity(text_emb,im_embs)
+    text_embs=text_embs.unsqueeze(1).expand(-1,3,-1).reshape(-1,512)
+    losses=-1*torch.cosine_similarity(text_embs,im_embs)
     loss = losses.mean()
     
-    im_samples = [ims[0],ims[1],ims[2]]
-    im_samples = [im.detach().cpu() for im in im_samples]
-        
-    return losses.mean(), im_samples
+    if args.use_tensorboard and not iter%10:
+        im_samples= ims.view(-1,3,224,224)
+        grid = torchvision.utils.make_grid(im_samples)
+        writer.add_image('images', grid, iter)
+
+    return loss
+
+
 
 def get_clip_model(args):
     if args.clip_model_type == "B-16":
@@ -67,10 +75,88 @@ def get_clip_model(args):
     args.cond_emb_dim = cond_emb_dim
     return args, clip_model
 
-def generate_on_train_query(args,clip_model,autoencoder,latent_flow_model,renderer,text_in,batch_size,rotation,resizer,iter):
-    transform = rotation 
-    autoencoder.eval()
-    latent_flow_model.eval()
+def get_text_embeddings(args,clip_model,query_array):
+    # get the text embedding for each query
+    text_tokens = []
+    for text in query_array:
+        text_tokens.append(clip.tokenize([text]).to(args.device))
+        
+    text_tokens = torch.cat(text_tokens,dim=0)
+    text_features = clip_model.encode_text(text_tokens)
+    text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+
+    return text_features
+
+def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,renderer,query_array,rotation,resizer,iter):
+    clip_model.eval()
+    autoencoder.train()
+    latent_flow_model.eval() # has to be in .eval() mode for the sampling to work (which is bad but whatever)
+    
+    voxel_size = 32
+    batch_size = len(query_array)
+    
+    shape = (voxel_size, voxel_size, voxel_size)
+    p = visualization.make_3d_grid([-0.5] * 3, [+0.5] * 3, shape).type(torch.FloatTensor).to(args.device)
+    query_points = p.expand(batch_size, *p.size())
+    
+     # get the text embedding for each query
+    text_features = get_text_embeddings(args,clip_model,query_array)
+    
+    noise = torch.Tensor(batch_size, args.emb_dims).normal_().to(args.device)
+    decoder_embs = latent_flow_model.sample(batch_size, noise=noise, cond_inputs=text_features)
+
+    out_3d = autoencoder.decoding(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size).to(args.device)
+    out_3d_soft = torch.sigmoid(100*(out_3d-args.threshold))
+   
+    if not iter%10:
+        out_3d_hard = out_3d.detach() > args.threshold
+        rgbs_hard = []
+        for i in range(batch_size):
+            angles=[]
+            rand_rotate_i_hard =  rotation.rotate_random(out_3d_hard[i].float().unsqueeze(0).unsqueeze(0))
+            for axis in range(3):
+                out_2d_i_hard = renderer.render(volume=rand_rotate_i_hard.squeeze(),axis=axis).double()                
+                angles.append(out_2d_i_hard.unsqueeze(0))
+            rgbs_hard.append(torch.stack(angles,dim=0).unsqueeze(0))
+    
+        rgbs_hard = torch.cat(rgbs_hard,0)
+        rgbs_hard = rgbs_hard.expand(-1,-1, 3,-1,-1).view(batch_size*3,3,voxel_size,voxel_size)
+        rgbs_hard = resizer(rgbs_hard)
+        
+        hard_im_embeddings = clip_model.encode_image(rgbs_hard)
+        
+        text_labels = text_features.unsqueeze(1).expand(-1,3,-1).reshape(-1,512)
+        hard_loss = -1*torch.cosine_similarity(text_labels,hard_im_embeddings).mean()
+        #write to tensorboard
+        voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard[0],args,clip_model,text_features,iter,query_array[0])
+        if args.use_tensorboard:
+            writer.add_scalar('Loss/hard_loss', hard_loss, iter)
+            writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
+    
+    
+    rgbs = []
+    for i in range(batch_size):
+        rand_rotate_i =  rotation.rotate_random(out_3d_soft[i].float().unsqueeze(0).unsqueeze(0))
+        angles=[]
+        for axis in range(3):
+            out_2d_i = renderer.render(volume=rand_rotate_i.squeeze(),axis=axis).double()            
+            angles.append(out_2d_i.unsqueeze(0))
+        rgbs.append(torch.stack(angles,dim=0).unsqueeze(0))        
+    
+    rgbs = torch.cat(rgbs,0)
+    rgbs = rgbs.expand(-1,-1, 3,-1,-1).view(batch_size*3,3,voxel_size,voxel_size)
+    rgbs =  resizer(rgbs)
+    
+    # clip_embs = clip_model.encode_image(rgbs)
+    # save_image(out_2d_1, "rotated_car_out_2d_1.png")
+    
+    return text_features,rgbs
+
+
+def generate_single_query(args,clip_model,autoencoder,latent_flow_model,renderer,text_in,batch_size,rotation,resizer,iter):
+    clip_model.eval()
+    autoencoder.train()
+    latent_flow_model.train()
     voxel_size = 32
     shape = (voxel_size, voxel_size, voxel_size)
     p = visualization.make_3d_grid([-0.5] * 3, [+0.5] * 3, shape).type(torch.FloatTensor).to(args.device)
@@ -90,8 +176,7 @@ def generate_on_train_query(args,clip_model,autoencoder,latent_flow_model,render
         out_3d_hard = out_3d.detach() > args.threshold
         rgbs_hard = []
         for i in range(batch_size):
-            rand_rotate_i = transform.rotate_random(out_3d_soft[i].float().unsqueeze(0).unsqueeze(0))
-            rand_rotate_i_hard = transform.rotate_random(out_3d_hard[i].float().unsqueeze(0).unsqueeze(0))
+            rand_rotate_i_hard =  rotation.rotate_random(out_3d_hard[i].float().unsqueeze(0).unsqueeze(0))
             for axis in range(3):
                 out_2d_i_hard = renderer.render(volume=rand_rotate_i_hard.squeeze(),axis=axis).double()                
                 rgbs_hard.append(out_2d_i_hard.unsqueeze(0))
@@ -103,15 +188,15 @@ def generate_on_train_query(args,clip_model,autoencoder,latent_flow_model,render
         hard_im_embeddings = clip_model.encode_image(rgbs_hard)
         hard_loss = -1*torch.cosine_similarity(text_features,hard_im_embeddings).mean()
         #write to tensorboard
-        writer.add_scalar('Loss/hard_loss', hard_loss, iter)
         voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard[0],args,clip_model,text_features,iter,text_in)
-        writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
-        
+        if args.use_tensorboard:
+            writer.add_scalar('Loss/hard_loss', hard_loss, iter)
+            writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)        
     # out_3d_soft = out_3d_soft.unsqueeze(0)
     
     rgbs = []
     for i in range(batch_size):
-        rand_rotate_i = transform.rotate_random(out_3d_soft[i].float().unsqueeze(0).unsqueeze(0))
+        rand_rotate_i =  rotation.rotate_random(out_3d_soft[i].float().unsqueeze(0).unsqueeze(0))
         for axis in range(3):
             out_2d_i = renderer.render(volume=rand_rotate_i.squeeze(),axis=axis).double()            
             rgbs.append(out_2d_i.unsqueeze(0))
@@ -133,7 +218,8 @@ def evaluate_true_voxel(out_3d,args,clip_model,text_features,i,text):
     # load the image that was saved and transform it to a tensor
     voxel_im = PIL.Image.open('%s/sample_%s.png' % (text,i)).convert('RGB')
     voxel_tensor = T.ToTensor()(voxel_im)
-    writer.add_image('voxel image', voxel_tensor, i)
+    if args.use_tensorboard:
+        writer.add_image('voxel image', voxel_tensor, i)
     # #convert to 224x224 image with 3 channels
     voxel_tensor = T.Resize((224,224))(voxel_tensor).unsqueeze(0)
     # get CLIP embedding
@@ -160,7 +246,7 @@ def get_local_parser(mode="args"):
     parser.add_argument("--text_query",  type=str, default="")
     parser.add_argument("--beta",  type=float, default=25, help='regularization coefficient')
     parser.add_argument("--learning_rate",  type=float, default=01e-06, help='learning rate') #careful, base parser has "lr" param with different default value
-    
+    parser.add_argument("--use_tensorboard",  type=bool, default=True, help='use tensorboard')
     if mode == "args":
         args = parser.parse_args()
         return args
@@ -186,16 +272,14 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         flow_optimizer.zero_grad()
         net_optimizer.zero_grad()
         
-        loss, rgb_images =clip_loss(sample_query,args,clip_model,autoencoder,latent_flow_model,renderer,rotation,resizer,iter)
-        #save image
-        grid = torchvision.utils.make_grid(rgb_images)
-        writer.add_image('rendered image', grid, iter)
+        loss =clip_loss(args,clip_model,autoencoder,latent_flow_model,renderer,rotation,resizer,iter)        
         
         loss.backward()
                 
         losses.append(loss.item())
         
-        writer.add_scalar('Loss/train', loss.item(), iter)
+        if args.use_tensorboard:
+            writer.add_scalar('Loss/train', loss.item(), iter)
         
         flow_optimizer.step()
         net_optimizer.step()
@@ -227,5 +311,6 @@ def main(args):
 
 if __name__=="__main__":
     args=get_local_parser()
-    writer=SummaryWriter(comment='_%s_lr=%s_beta=%s_gpu=%s'% (args.text_query,args.learning_rate,args.beta,args.gpu[0]))
+    if args.use_tensorboard:
+        writer=SummaryWriter(comment='_%s_lr=%s_beta=%s_gpu=%s'% (args.text_query,args.learning_rate,args.beta,args.gpu[0]))
     main(args)
