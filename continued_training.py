@@ -30,7 +30,10 @@ import PIL
 
 
 def clip_loss(query,args,clip_model,autoencoder,latent_flow_model,renderer,rotation,resizer,iter):
-    text_emb,ims = generate_on_train_query(args,clip_model,autoencoder,latent_flow_model,renderer,query,args.batch_size,rotation,resizer,iter)
+    # text_emb,ims = generate_single_query(args,clip_model,autoencoder,latent_flow_model,renderer,query,args.batch_size,rotation,resizer,iter)
+    
+    query_array = ['wineglass','spoon','fork','knife','screwdriver','hammer']
+    generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,renderer,query_array,rotation,resizer,iter)
     
     im_embs=clip_model.encode_image(ims)
     losses=-1*torch.cosine_similarity(text_emb,im_embs)
@@ -39,7 +42,9 @@ def clip_loss(query,args,clip_model,autoencoder,latent_flow_model,renderer,rotat
     im_samples = [ims[0],ims[1],ims[2]]
     im_samples = [im.detach().cpu() for im in im_samples]
         
-    return losses.mean(), im_samples
+    return loss, im_samples
+
+
 
 def get_clip_model(args):
     if args.clip_model_type == "B-16":
@@ -67,10 +72,83 @@ def get_clip_model(args):
     args.cond_emb_dim = cond_emb_dim
     return args, clip_model
 
-def generate_on_train_query(args,clip_model,autoencoder,latent_flow_model,renderer,text_in,batch_size,rotation,resizer,iter):
-    transform = rotation 
-    autoencoder.eval()
-    latent_flow_model.eval()
+def get_text_embeddings(args,clip_model,query_array):
+    # get the text embedding for each query
+    text_tokens = []
+    for text in query_array:
+        text_tokens.append(clip.tokenize([text]).to(args.device))
+        
+    text_tokens = torch.cat(text_tokens,dim=0)
+    text_features = clip_model.encode_text(text_tokens)
+    text_features = text_features / text_features.norm(dim=-1, keepdim=True)
+
+    return text_features
+
+def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,renderer,query_array,rotation,resizer,iter):
+    clip_model.eval()
+    autoencoder.train()
+    latent_flow_model.train()
+    
+    voxel_size = 32
+    batch_size = len(query_array)
+    
+    shape = (voxel_size, voxel_size, voxel_size)
+    p = visualization.make_3d_grid([-0.5] * 3, [+0.5] * 3, shape).type(torch.FloatTensor).to(args.device)
+    query_points = p.expand(batch_size, *p.size())
+    
+     # get the text embedding for each query
+    text_features = get_text_embeddings(args,clip_model,query_array)
+    
+    noise = torch.Tensor(batch_size, args.emb_dims).normal_().to(args.device)
+    decoder_embs = latent_flow_model.sample(batch_size, noise=noise, cond_inputs=text_features)
+
+    out_3d = autoencoder.decoding(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size).to(args.device)
+    out_3d_soft = torch.sigmoid(100*(out_3d-args.threshold))
+   
+    if not iter%10:
+        out_3d_hard = out_3d.detach() > args.threshold
+        rgbs_hard = []
+        for i in range(batch_size):
+            rand_rotate_i_hard =  rotation.rotate_random(out_3d_hard[i].float().unsqueeze(0).unsqueeze(0))
+            for axis in range(3):
+                out_2d_i_hard = renderer.render(volume=rand_rotate_i_hard.squeeze(),axis=axis).double()                
+                rgbs_hard.append(out_2d_i_hard.unsqueeze(0))
+    
+        rgbs_hard = torch.cat(rgbs_hard,0)
+        rgbs_hard = rgbs_hard.unsqueeze(1).expand(-1,3,-1,-1)
+        rgbs_hard = resizer(rgbs_hard)
+        
+        hard_im_embeddings = clip_model.encode_image(rgbs_hard)
+        hard_loss = -1*torch.cosine_similarity(text_features,hard_im_embeddings).mean()
+        #write to tensorboard
+        writer.add_scalar('Loss/hard_loss', hard_loss, iter)
+        voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard[0],args,clip_model,text_features,iter,text_in)
+        writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
+    
+    
+    rgbs = []
+    for i in range(batch_size):
+        rand_rotate_i =  rotation.rotate_random(out_3d_soft[i].float().unsqueeze(0).unsqueeze(0))
+        angles=[]
+        for axis in range(3):
+            out_2d_i = renderer.render(volume=rand_rotate_i.squeeze(),axis=axis).double()            
+            angles.append(out_2d_i.unsqueeze(0))
+        rgbs.append(angles)        
+    
+    rgbs = torch.cat(rgbs,0)
+    rgbs = rgbs.unsqueeze(1).expand(-1,3,-1,-1)
+    rgbs =  resizer(rgbs)
+    
+    # clip_embs = clip_model.encode_image(rgbs)
+    # save_image(out_2d_1, "rotated_car_out_2d_1.png")
+    
+    return text_features,rgbs
+
+
+def generate_single_query(args,clip_model,autoencoder,latent_flow_model,renderer,text_in,batch_size,rotation,resizer,iter):
+    clip_model.eval()
+    autoencoder.train()
+    latent_flow_model.train()
     voxel_size = 32
     shape = (voxel_size, voxel_size, voxel_size)
     p = visualization.make_3d_grid([-0.5] * 3, [+0.5] * 3, shape).type(torch.FloatTensor).to(args.device)
@@ -90,8 +168,7 @@ def generate_on_train_query(args,clip_model,autoencoder,latent_flow_model,render
         out_3d_hard = out_3d.detach() > args.threshold
         rgbs_hard = []
         for i in range(batch_size):
-            rand_rotate_i = transform.rotate_random(out_3d_soft[i].float().unsqueeze(0).unsqueeze(0))
-            rand_rotate_i_hard = transform.rotate_random(out_3d_hard[i].float().unsqueeze(0).unsqueeze(0))
+            rand_rotate_i_hard =  rotation.rotate_random(out_3d_hard[i].float().unsqueeze(0).unsqueeze(0))
             for axis in range(3):
                 out_2d_i_hard = renderer.render(volume=rand_rotate_i_hard.squeeze(),axis=axis).double()                
                 rgbs_hard.append(out_2d_i_hard.unsqueeze(0))
@@ -111,7 +188,7 @@ def generate_on_train_query(args,clip_model,autoencoder,latent_flow_model,render
     
     rgbs = []
     for i in range(batch_size):
-        rand_rotate_i = transform.rotate_random(out_3d_soft[i].float().unsqueeze(0).unsqueeze(0))
+        rand_rotate_i =  rotation.rotate_random(out_3d_soft[i].float().unsqueeze(0).unsqueeze(0))
         for axis in range(3):
             out_2d_i = renderer.render(volume=rand_rotate_i.squeeze(),axis=axis).double()            
             rgbs.append(out_2d_i.unsqueeze(0))
