@@ -227,5 +227,5 @@ def main(args):
 
 if __name__=="__main__":
     args=get_local_parser()
-    writer=SummaryWriter(comment='_%s'%args.text_query)
+    writer=SummaryWriter(comment='_%s_lr=%s_beta=%s'% (args.text_query,args.learning_rate,args.beta))
     main(args)
