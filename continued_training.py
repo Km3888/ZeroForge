@@ -75,7 +75,7 @@ def generate_on_train_query(args,clip_model,autoencoder,latent_flow_model,render
     shape = (voxel_size, voxel_size, voxel_size)
     p = visualization.make_3d_grid([-0.5] * 3, [+0.5] * 3, shape).type(torch.FloatTensor).to(args.device)
     query_points = p.expand(batch_size, *p.size())
-    
+        
     text = clip.tokenize([text_in]).to(args.device)
     text_features = clip_model.encode_text(text)
     text_features = text_features / text_features.norm(dim=-1, keepdim=True)
@@ -84,7 +84,7 @@ def generate_on_train_query(args,clip_model,autoencoder,latent_flow_model,render
     decoder_embs = latent_flow_model.sample(batch_size, noise=noise, cond_inputs=text_features.repeat(batch_size,1))
 
     out_3d = autoencoder.decoding(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size).to(args.device)
-    out_3d_soft = torch.sigmoid(100*(out_3d-args.threshold))
+    out_3d_soft = torch.sigmoid(args.beta*(out_3d-args.threshold))
         
     if not iter%10:
         out_3d_hard = out_3d.detach() > args.threshold
@@ -158,7 +158,8 @@ def get_local_parser(mode="args"):
     parser.add_argument("--checkpoint_dir_prior", type=str, default=None)
     parser.add_argument("--checkpoint_nf",  type=str, default="best", help='what is the checkpoint for nf')
     parser.add_argument("--text_query",  type=str, default="")
-    parser.add_argument("--beta",  type=float, default=100.0, help='regularization coefficient')
+    parser.add_argument("--beta",  type=float, default=25, help='regularization coefficient')
+    parser.add_argument("--learning_rate",  type=float, default=01e-06, help='learning rate') #careful, base parser has "lr" param with different default value
     
     if mode == "args":
         args = parser.parse_args()
@@ -172,8 +173,8 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     assert len(sample_query)
     rotation = dt.Transform(args.device)
     resizer = T.Resize(224)
-    flow_optimizer=optim.Adam(latent_flow_model.parameters(), lr=01e-06)
-    net_optimizer=optim.Adam(autoencoder.parameters(), lr=01e-06)
+    flow_optimizer=optim.Adam(latent_flow_model.parameters(), lr=args.learning_rate)
+    net_optimizer=optim.Adam(autoencoder.parameters(), lr=args.learning_rate)
     
     losses = []
     
