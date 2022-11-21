@@ -36,13 +36,16 @@ def clip_loss(args,clip_model,autoencoder,latent_flow_model,renderer,rotation,re
     text_embs,ims = generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,renderer,query_array,rotation,resizer,iter)
     
     im_embs=clip_model.encode_image(ims)
+    text_embs=text_embs.unsqueeze(1).expand(-1,3,-1).reshape(-1,512)
     losses=-1*torch.cosine_similarity(text_embs,im_embs)
     loss = losses.mean()
     
-    im_samples = [ims[0],ims[1],ims[2]]
-    im_samples = [im.detach().cpu() for im in im_samples]
-        
-    return loss, im_samples
+    if args.use_tensorboard and not iter%10:
+        im_samples= ims.view(-1,3,224,224)
+        grid = torchvision.utils.make_grid(im_samples)
+        writer.add_image('images', grid, iter)
+
+    return loss
 
 
 
@@ -117,13 +120,15 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
             rgbs_hard.append(torch.stack(angles,dim=0).unsqueeze(0))
     
         rgbs_hard = torch.cat(rgbs_hard,0)
-        rgbs_hard = rgbs_hard.unsqueeze(1).expand(-1,3,-1,-1)
+        rgbs_hard = rgbs_hard.expand(-1,-1, 3,-1,-1).view(batch_size*3,3,voxel_size,voxel_size)
         rgbs_hard = resizer(rgbs_hard)
         
         hard_im_embeddings = clip_model.encode_image(rgbs_hard)
-        hard_loss = -1*torch.cosine_similarity(text_features,hard_im_embeddings).mean()
+        
+        text_labels = text_features.unsqueeze(1).expand(-1,3,-1).reshape(-1,512)
+        hard_loss = -1*torch.cosine_similarity(text_labels,hard_im_embeddings).mean()
         #write to tensorboard
-        voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard[0],args,clip_model,text_features,iter,text_in)
+        voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard[0],args,clip_model,text_features,iter,query_array[0])
         if args.use_tensorboard:
             writer.add_scalar('Loss/hard_loss', hard_loss, iter)
             writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
@@ -136,10 +141,10 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
         for axis in range(3):
             out_2d_i = renderer.render(volume=rand_rotate_i.squeeze(),axis=axis).double()            
             angles.append(out_2d_i.unsqueeze(0))
-        rgbs.append(angles)        
+        rgbs.append(torch.stack(angles,dim=0).unsqueeze(0))        
     
     rgbs = torch.cat(rgbs,0)
-    rgbs = rgbs.unsqueeze(1).expand(-1,3,-1,-1)
+    rgbs = rgbs.expand(-1,-1, 3,-1,-1).view(batch_size*3,3,voxel_size,voxel_size)
     rgbs =  resizer(rgbs)
     
     # clip_embs = clip_model.encode_image(rgbs)
@@ -267,17 +272,13 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         flow_optimizer.zero_grad()
         net_optimizer.zero_grad()
         
-        loss, rgb_images =clip_loss(args,clip_model,autoencoder,latent_flow_model,renderer,rotation,resizer,iter)
-        #save image
-        grid = torchvision.utils.make_grid(rgb_images)
-        
+        loss =clip_loss(args,clip_model,autoencoder,latent_flow_model,renderer,rotation,resizer,iter)        
         
         loss.backward()
                 
         losses.append(loss.item())
         
         if args.use_tensorboard:
-            writer.add_image('rendered image', grid, iter)
             writer.add_scalar('Loss/train', loss.item(), iter)
         
         flow_optimizer.step()
