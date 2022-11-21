@@ -40,7 +40,7 @@ def clip_loss(args,query_array,clip_model,autoencoder,latent_flow_model,renderer
     loss = losses.mean()
     
     if args.use_tensorboard and not iter%10:
-        im_samples= ims.view(-1,3,224,224)
+        im_samples= ims.view(-1,3,3,224,224)
         grid = torchvision.utils.make_grid(im_samples)
         writer.add_image('images', grid, iter)
 
@@ -127,7 +127,7 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
         text_labels = text_features.unsqueeze(1).expand(-1,3,-1).reshape(-1,512)
         hard_loss = -1*torch.cosine_similarity(text_labels,hard_im_embeddings).mean()
         #write to tensorboard
-        voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard[0],args,clip_model,text_features,iter,query_array[0])
+        voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard[0],args,clip_model,text_features[0],iter,query_array[0])
         if args.use_tensorboard:
             writer.add_scalar('Loss/hard_loss', hard_loss, iter)
             writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
@@ -165,7 +165,7 @@ def evaluate_true_voxel(out_3d,args,clip_model,text_features,i,text):
     voxel_tensor = T.Resize((224,224))(voxel_tensor).unsqueeze(0)
     # get CLIP embedding
     voxel_image_embedding = clip_model.encode_image(voxel_tensor.to(args.device))
-    voxel_similarity = torch.cosine_similarity(text_features, voxel_image_embedding)
+    voxel_similarity = torch.cosine_similarity(text_features.unsqueeze(0), voxel_image_embedding)
     return voxel_similarity
 
 
@@ -253,7 +253,8 @@ query_arrays = {"wineglass": ["wineglass"],
                 "spoon": ["spoon"],
                 "fork": ["fork"],
                 "hammer": ["hammer"],
-                "six": ["wineglass','spoon','fork','knife','screwdriver','hammer"],
+                "six": ['wineglass','spoon','fork','knife','screwdriver','hammer'],
+                "fourteen": ["wineglass','spoon','fork','knife','screwdriver','hammer","pencil","screw","screwdriver","plate","mushroom","umbrella","thimble","sombrero","sandal"]
 }
 
 if __name__=="__main__":
