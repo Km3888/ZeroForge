@@ -29,10 +29,10 @@ import PIL
 
 
 
-def clip_loss(args,query_array,clip_model,autoencoder,latent_flow_model,renderer,rotation,resizer,iter):
+def clip_loss(args,query_array,clip_model,autoencoder,latent_flow_model,renderer,rotation,resizer,iter,text_features=None):
     # text_emb,ims = generate_single_query(args,clip_model,autoencoder,latent_flow_model,renderer,query,args.batch_size,rotation,resizer,iter)
     
-    text_embs,ims = generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,renderer,query_array,rotation,resizer,iter)
+    text_embs,ims = generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,renderer,query_array,rotation,resizer,iter,text_features=text_features)
     
     im_embs=clip_model.encode_image(ims)
     text_embs=text_embs.unsqueeze(1).expand(-1,3,-1).reshape(-1,512)
@@ -78,7 +78,7 @@ def get_text_embeddings(args,clip_model,query_array):
     # get the text embedding for each query
     text_tokens = []
     for text in query_array:
-        text_tokens.append(clip.tokenize([text]).to(args.device))
+        text_tokens.append(clip.tokenize([text]).detach().to(args.device))
         
     text_tokens = torch.cat(text_tokens,dim=0)
     text_features = clip_model.encode_text(text_tokens)
@@ -86,7 +86,7 @@ def get_text_embeddings(args,clip_model,query_array):
 
     return text_features
 
-def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,renderer,query_array,rotation,resizer,iter):
+def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,renderer,query_array,rotation,resizer,iter,text_features=None):
     clip_model.eval()
     autoencoder.train()
     latent_flow_model.eval() # has to be in .eval() mode for the sampling to work (which is bad but whatever)
@@ -99,7 +99,8 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
     query_points = p.expand(batch_size, *p.size())
     
      # get the text embedding for each query
-    text_features = get_text_embeddings(args,clip_model,query_array)
+    if text_features is None:
+        text_features = get_text_embeddings(args,clip_model,query_array)
     
     noise = torch.Tensor(batch_size, args.emb_dims).normal_().to(args.device)
     decoder_embs = latent_flow_model.sample(batch_size, noise=noise, cond_inputs=text_features)
@@ -213,6 +214,7 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     losses = []
     
     query_array = query_arrays[args.query_array]
+    text_features = get_text_embeddings(args,clip_model,query_array)
     # make directory for saving images with name of the text query using os.makedirs
     if not os.path.exists(args.query_array):
         os.makedirs(args.query_array)
@@ -221,7 +223,7 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         flow_optimizer.zero_grad()
         net_optimizer.zero_grad()
         
-        loss =clip_loss(args,query_array,clip_model,autoencoder,latent_flow_model,renderer,rotation,resizer,iter)        
+        loss = clip_loss(args,query_array,clip_model,autoencoder,latent_flow_model,renderer,rotation,resizer,iter,text_features)        
         
         loss.backward()
                 
