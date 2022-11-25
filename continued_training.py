@@ -196,7 +196,8 @@ def get_local_parser(mode="args"):
     parser.add_argument("--beta",  type=float, default=75, help='regularization coefficient')
     parser.add_argument("--learning_rate",  type=float, default=01e-06, help='learning rate') #careful, base parser has "lr" param with different default value
     parser.add_argument("--use_tensorboard",  type=bool, default=True, help='use tensorboard')
-    parser.add_argument("--query_array",  type=str, default=None, help='use tensorboard')
+    parser.add_argument("--query_array",  type=str, default=None, help='multiple queries') #TODO deprecate
+    parser.add_argument("--uninitialized",  type=bool, default=False, help='Use untrained networks')
     if mode == "args":
         args = parser.parse_args()
         return args
@@ -241,22 +242,22 @@ def main(args):
     args, clip_model = get_clip_model(args)
     
     net = autoencoder.get_model(args).to(args.device)
-    checkpoint = torch.load(args.checkpoint_dir_base +"/"+ args.checkpoint +".pt", map_location=args.device)
-    net.load_state_dict(checkpoint['model'])
-    net.eval()
+    if not args.uninitialized:
+        checkpoint = torch.load(args.checkpoint_dir_base +"/"+ args.checkpoint +".pt", map_location=args.device)
+        net.load_state_dict(checkpoint['model'])
+        net.eval()
     
     latent_flow_network = latent_flows.get_generator(args.emb_dims, args.cond_emb_dim, device, flow_type=args.flow_type, num_blocks=args.num_blocks, num_hidden=args.num_hidden)
-    checkpoint_nf_path = os.path.join(args.checkpoint_dir_prior,  args.checkpoint_nf +".pt")
-    checkpoint = torch.load(checkpoint_nf_path, map_location=args.device)
-    latent_flow_network.load_state_dict(checkpoint['model'])
+    if not args.uninitialized:
+        checkpoint_nf_path = os.path.join(args.checkpoint_dir_prior,  args.checkpoint_nf +".pt")
+        checkpoint = torch.load(checkpoint_nf_path, map_location=args.device)
+        latent_flow_network.load_state_dict(checkpoint['model'])
     
     param_dict={'device':args.device,'cube_len':32}
     renderer=renderer_dict['absorption_only'](param=param_dict)
     
     test_train(args,clip_model,net,latent_flow_network,renderer)
     
-    print('xx')
-
 query_arrays = {"wineglass": ["wineglass"],
                 "spoon": ["spoon"],
                 "fork": ["fork"],
@@ -270,5 +271,5 @@ if __name__=="__main__":
     args=get_local_parser()
     print(args.learning_rate)
     if args.use_tensorboard:
-        writer=SummaryWriter(comment='_%s_lr=%s_beta=%s_gpu=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0]))
+        writer=SummaryWriter(comment='_%s_lr=%s_beta=%s_gpu=%s_baseline=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized))
     main(args)
