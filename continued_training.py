@@ -40,8 +40,8 @@ def clip_loss(args,query_array,clip_model,autoencoder,latent_flow_model,renderer
     loss = losses.mean()
     
     if args.use_tensorboard and not iter%10:
-        im_samples= ims.view(-1,3,3,224,224)
-        grid = torchvision.utils.make_grid(im_samples)
+        im_samples= ims.view(-1,3,224,224)
+        grid = torchvision.utils.make_grid(im_samples, nrow=3)
         writer.add_image('images', grid, iter)
 
     return loss
@@ -107,7 +107,7 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
     out_3d = autoencoder.decoding(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size).to(args.device)
     out_3d_soft = torch.sigmoid(args.beta*(out_3d-args.threshold))
    
-    if not iter%10:
+    if not iter%50:
         out_3d_hard = out_3d.detach() > args.threshold
         rgbs_hard = []
         for i in range(batch_size):
@@ -127,7 +127,7 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
         text_labels = text_features.unsqueeze(1).expand(-1,3,-1).reshape(-1,512)
         hard_loss = -1*torch.cosine_similarity(text_labels,hard_im_embeddings).mean()
         #write to tensorboard
-        voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard[0],args,clip_model,text_features[0],iter,query_array[0])
+        voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard,args,clip_model,text_features,iter)
         if args.use_tensorboard:
             writer.add_scalar('Loss/hard_loss', hard_loss, iter)
             writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
@@ -152,20 +152,28 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
     return text_features,rgbs
     
 
-def evaluate_true_voxel(out_3d,args,clip_model,text_features,i,text):
+def evaluate_true_voxel(out_3d,args,clip_model,text_features,i):
     # code for saving the "true" voxel image, not useful right now
     out_3d_hard = out_3d>args.threshold
-    voxel_save(out_3d_hard.squeeze().cpu().detach(), None, out_file='%s/sample_%s.png' % (args.query_array,i))
-    # load the image that was saved and transform it to a tensor
-    voxel_im = PIL.Image.open('%s/sample_%s.png' % (args.query_array,i)).convert('RGB')
-    voxel_tensor = T.ToTensor()(voxel_im)
+    voxel_ims=[]
+    num_shapes = out_3d_hard.shape[0]
+    for shape in range(num_shapes):
+        voxel_save(out_3d_hard[shape].squeeze().cpu().detach(), None, out_file='%s/sample_%s_%s.png' % (args.query_array,i,shape))
+        # load the image that was saved and transform it to a tensor
+        voxel_im = PIL.Image.open('%s/sample_%s_%s.png' % (args.query_array,i,shape)).convert('RGB')
+        voxel_tensor = T.ToTensor()(voxel_im)
+        voxel_ims.append(voxel_tensor.unsqueeze(0))
+    
+    voxel_ims = torch.cat(voxel_ims,0)
+    grid = torchvision.utils.make_grid(voxel_ims, nrow=num_shapes)
+    
     if args.use_tensorboard:
-        writer.add_image('voxel image', voxel_tensor, i)
+        writer.add_image('voxel image', grid, i)
     # #convert to 224x224 image with 3 channels
-    voxel_tensor = T.Resize((224,224))(voxel_tensor).unsqueeze(0)
+    voxel_tensor = T.Resize((224,224))(voxel_ims)
     # get CLIP embedding
     voxel_image_embedding = clip_model.encode_image(voxel_tensor.to(args.device))
-    voxel_similarity = torch.cosine_similarity(text_features.unsqueeze(0), voxel_image_embedding)
+    voxel_similarity = torch.cosine_similarity(text_features, voxel_image_embedding).mean()
     return voxel_similarity
 
 
@@ -185,7 +193,7 @@ def get_local_parser(mode="args"):
     parser.add_argument("--checkpoint_dir_prior", type=str, default=None)
     parser.add_argument("--checkpoint_nf",  type=str, default="best", help='what is the checkpoint for nf')
     parser.add_argument("--text_query",  type=str, default="")
-    parser.add_argument("--beta",  type=float, default=25, help='regularization coefficient')
+    parser.add_argument("--beta",  type=float, default=75, help='regularization coefficient')
     parser.add_argument("--learning_rate",  type=float, default=01e-06, help='learning rate') #careful, base parser has "lr" param with different default value
     parser.add_argument("--use_tensorboard",  type=bool, default=True, help='use tensorboard')
     parser.add_argument("--query_array",  type=str, default=None, help='use tensorboard')
@@ -208,7 +216,7 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     if not os.path.exists(args.query_array):
         os.makedirs(args.query_array)
 
-    for iter in range(5000):
+    for iter in range(30000):
         flow_optimizer.zero_grad()
         net_optimizer.zero_grad()
         
@@ -254,11 +262,13 @@ query_arrays = {"wineglass": ["wineglass"],
                 "fork": ["fork"],
                 "hammer": ["hammer"],
                 "six": ['wineglass','spoon','fork','knife','screwdriver','hammer'],
+                "nine": ['wineglass','spoon','fork','knife','screwdriver','hammer',"soccer ball", "football","plate"],
                 "fourteen": ["wineglass','spoon','fork','knife','screwdriver','hammer","pencil","screw","screwdriver","plate","mushroom","umbrella","thimble","sombrero","sandal"]
 }
 
 if __name__=="__main__":
     args=get_local_parser()
+    print(args.learning_rate)
     if args.use_tensorboard:
         writer=SummaryWriter(comment='_%s_lr=%s_beta=%s_gpu=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0]))
     main(args)
