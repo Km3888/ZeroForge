@@ -32,7 +32,7 @@ def experiment_name(args):
 
     from datetime import datetime
 
-    tokens = ["Autoencoder", args.dataset_name, args.input_type, args.output_type, args.emb_dims, args.last_feature_transform]
+    tokens = ["New_","Autoencoder", args.dataset_name, args.input_type, args.output_type, args.emb_dims, args.last_feature_transform]
            
     if args.categories != None:
         for i in args.categories:

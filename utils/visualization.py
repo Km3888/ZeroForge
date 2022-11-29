@@ -203,7 +203,7 @@ def plot_real_pred(real_points, pred_points, num_plots, lmit=0.6, save_loc=None)
     
     plt.show()  
     
-def multiple_plot_voxel(batch_data_points, save_loc=None, transpose=True):
+def multiple_plot_voxel(batch_data_points, save_loc=None, transpose=True,show=True):
         
     fig = plt.figure(figsize=(40,10))
 
@@ -229,7 +229,8 @@ def multiple_plot_voxel(batch_data_points, save_loc=None, transpose=True):
         plt.savefig(save_loc)
         plt.close()
         return
-    plt.show()
+    if show:
+        plt.show()
     
 def multiple_plot(batch_data_points, lmit=0.6, save_loc=None):
     

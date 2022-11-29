@@ -3,3 +3,54 @@ exps/*
 nohup.out
 *pyc
 __pycache__ 
+__MACOSX/exps/._.DS_Store
+__MACOSX/exps/classifier/._.DS_Store
+__MACOSX/exps/models/._.DS_Store
+__MACOSX/._exps
+.vscode/launch.json
+.vscode/settings.json
+exps.zip
+absorption_only/plane_out_2d_1.png
+absorption_only/plane_out_2d_2.png
+absorption_only/plane_out_2d_3.png
+absorption_only/plane_voxel_file.png
+embeddings/a bench_clip.pt
+embeddings/a bench_z.pt
+embeddings/a boat_clip.pt
+embeddings/a boat_z.pt
+embeddings/a cabinet_clip.pt
+embeddings/a cabinet_z.pt
+embeddings/a car_clip.pt
+embeddings/a car_z.pt
+embeddings/a chair_clip.pt
+embeddings/a chair_z.pt
+embeddings/a gun_clip.pt
+embeddings/a gun_z.pt
+embeddings/a lamp_clip.pt
+embeddings/a lamp_z.pt
+embeddings/a loudspeaker_clip.pt
+embeddings/a loudspeaker_z.pt
+embeddings/a monitor_clip.pt
+embeddings/a monitor_z.pt
+embeddings/a phone_clip.pt
+embeddings/a phone_z.pt
+embeddings/a sofa_clip.pt
+embeddings/a sofa_z.pt
+embeddings/a table_clip.pt
+embeddings/a table_z.pt
+embeddings/an airplane_clip.pt
+embeddings/an airplane_z.pt
+plane_voxel_file.png
+rgb_1.png
+rotated_car_out_2d_1.png
+rotated_car_out_2d_2.png
+rotated_car_out_2d_3.png
+img1.png
+car_voxel_file.png
+*/sample_*.png
+*.tfevents.*
+an airplane_out_2d_final.png
+axis=0.png
+axis=1.png
+axis=2.png
+queries/*

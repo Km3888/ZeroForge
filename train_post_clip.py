@@ -97,8 +97,7 @@ def get_dataloader(args, split="train", dataset_flag=False):
         if split == "train":
             dataset = shapenet_dataset.Shapes3dDataset(args.dataset_path, fields, split=split,
                      categories=args.categories, no_except=True, transform=None, num_points=args.num_points)
-
-            dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, drop_last=True, collate_fn=my_collate)
+            dataloader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, drop_last=True, collate_fn=my_collate)    
             total_shapes = len(dataset)
         else:
             dataset = shapenet_dataset.Shapes3dDataset(args.dataset_path, fields, split=split,
@@ -299,7 +298,7 @@ def main():
     logging.info("{}".format(args))
 
     device, gpu_array = helper.get_device(args)
-    args.device = device 
+    args.device = device
     
     args, clip_model = get_clip_model(args)
     
