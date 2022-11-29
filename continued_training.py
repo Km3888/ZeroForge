@@ -91,7 +91,7 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
     autoencoder.train()
     latent_flow_model.eval() # has to be in .eval() mode for the sampling to work (which is bad but whatever)
     
-    voxel_size = 32
+    voxel_size = args.num_voxels
     batch_size = len(query_array)
     
     shape = (voxel_size, voxel_size, voxel_size)
@@ -101,6 +101,7 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
      # get the text embedding for each query
     if text_features is None:
         text_features = get_text_embeddings(args,clip_model,query_array)
+        text_features = text_features.clone()
     
     noise = torch.Tensor(batch_size, args.emb_dims).normal_().to(args.device)
     decoder_embs = latent_flow_model.sample(batch_size, noise=noise, cond_inputs=text_features)
@@ -159,9 +160,9 @@ def evaluate_true_voxel(out_3d,args,clip_model,text_features,i):
     voxel_ims=[]
     num_shapes = out_3d_hard.shape[0]
     for shape in range(num_shapes):
-        voxel_save(out_3d_hard[shape].squeeze().cpu().detach(), None, out_file='%s/sample_%s_%s.png' % (args.query_array,i,shape))
+        voxel_save(out_3d_hard[shape].squeeze().cpu().detach(), None, out_file='queries/%s/sample_%s_%s.png' % (args.query_array,i,shape))
         # load the image that was saved and transform it to a tensor
-        voxel_im = PIL.Image.open('%s/sample_%s_%s.png' % (args.query_array,i,shape)).convert('RGB')
+        voxel_im = PIL.Image.open('queries/%s/sample_%s_%s.png' % (args.query_array,i,shape)).convert('RGB')
         voxel_tensor = T.ToTensor()(voxel_im)
         voxel_ims.append(voxel_tensor.unsqueeze(0))
     
@@ -197,8 +198,9 @@ def get_local_parser(mode="args"):
     parser.add_argument("--beta",  type=float, default=75, help='regularization coefficient')
     parser.add_argument("--learning_rate",  type=float, default=01e-06, help='learning rate') #careful, base parser has "lr" param with different default value
     parser.add_argument("--use_tensorboard",  type=bool, default=True, help='use tensorboard')
-    parser.add_argument("--query_array",  type=str, default=None, help='multiple queries') #TODO deprecate
+    parser.add_argument("--query_array",  type=str, default=None, help='multiple queries') 
     parser.add_argument("--uninitialized",  type=bool, default=False, help='Use untrained networks')
+    parser.add_argument("--num_voxels",  type=int, default=32, help='number of voxels')
     if mode == "args":
         args = parser.parse_args()
         return args
@@ -214,10 +216,12 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     losses = []
     
     query_array = query_arrays[args.query_array]
-    text_features = get_text_embeddings(args,clip_model,query_array)
+    if len(query_array) ==1:
+        query_array = query_array*args.num_views
+    text_features = get_text_embeddings(args,clip_model,query_array).detach()
     # make directory for saving images with name of the text query using os.makedirs
-    if not os.path.exists(args.query_array):
-        os.makedirs(args.query_array)
+    if not os.path.exists('queries/%s' % args.query_array):
+        os.makedirs('queries/%s' % args.query_array)
 
     for iter in range(30000):
         flow_optimizer.zero_grad()
@@ -255,7 +259,7 @@ def main(args):
         checkpoint = torch.load(checkpoint_nf_path, map_location=args.device)
         latent_flow_network.load_state_dict(checkpoint['model'])
     
-    param_dict={'device':args.device,'cube_len':32}
+    param_dict={'device':args.device,'cube_len':args.num_voxels}
     renderer=renderer_dict['absorption_only'](param=param_dict)
     
     test_train(args,clip_model,net,latent_flow_network,renderer)
@@ -271,7 +275,6 @@ query_arrays = {"wineglass": ["wineglass"],
 
 if __name__=="__main__":
     args=get_local_parser()
-    print(args.learning_rate)
     if args.use_tensorboard:
-        writer=SummaryWriter(comment='_%s_lr=%s_beta=%s_gpu=%s_baseline=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized))
+        writer=SummaryWriter(comment='_%s_lr=%s_beta=%s_gpu=%s_baseline=%s_v=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized,args.num_voxels))
     main(args)
