@@ -215,7 +215,10 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     
     losses = []
     
-    query_array = query_arrays[args.query_array]
+    if args.query_array in query_arrays:
+        query_array = query_arrays[args.query_array]
+    else:
+        query_array = [args.query_array]
     if len(query_array) ==1:
         query_array = query_array*args.num_views
     text_features = get_text_embeddings(args,clip_model,query_array).detach()
@@ -223,7 +226,7 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     if not os.path.exists('queries/%s' % args.query_array):
         os.makedirs('queries/%s' % args.query_array)
 
-    for iter in range(30000):
+    for iter in range(20000):
         flow_optimizer.zero_grad()
         net_optimizer.zero_grad()
         
@@ -264,7 +267,8 @@ def main(args):
     
     test_train(args,clip_model,net,latent_flow_network,renderer)
     
-query_arrays = {"wineglass": ["wineglass"],
+query_arrays = {
+                "wineglass": ["wineglass"],
                 "spoon": ["spoon"],
                 "fork": ["fork"],
                 "hammer": ["hammer"],
