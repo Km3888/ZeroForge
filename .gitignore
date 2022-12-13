@@ -54,3 +54,11 @@ axis=0.png
 axis=1.png
 axis=2.png
 queries/*
+chair_voxel_vis.png
+*.npy
+airplane_128.png
+boat_render.png
+chair_voxel_128_vis.png
+wineglass_render.png
+lamp_render.png
+requirements.txt

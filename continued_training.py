@@ -77,8 +77,9 @@ def get_clip_model(args):
 def get_text_embeddings(args,clip_model,query_array):
     # get the text embedding for each query
     text_tokens = []
-    for text in query_array:
-        text_tokens.append(clip.tokenize([text]).detach().to(args.device))
+    with torch.no_grad():
+        for text in query_array:
+            text_tokens.append(clip.tokenize([text]).detach().to(args.device))
         
     text_tokens = torch.cat(text_tokens,dim=0)
     text_features = clip_model.encode_text(text_tokens)
@@ -102,10 +103,10 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
     if text_features is None:
         text_features = get_text_embeddings(args,clip_model,query_array)
         text_features = text_features.clone()
-    
+        
     noise = torch.Tensor(batch_size, args.emb_dims).normal_().to(args.device)
     decoder_embs = latent_flow_model.sample(batch_size, noise=noise, cond_inputs=text_features)
-
+    
     out_3d = autoencoder.decoding(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size).to(args.device)
     out_3d_soft = torch.sigmoid(args.beta*(out_3d-args.threshold))
    
