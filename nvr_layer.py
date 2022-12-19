@@ -90,91 +90,144 @@ def process_voxel(voxel):
     
     return expanded
 
+def preprocess(object_voxels):
+    object_voxels = process_voxel(object_voxels)
+        
+    interpolated_voxels = estimate_ground_image(object_voxels)
+    
+    ground_image, ground_alpha = \
+        helpers.generate_ground_image(IMAGE_SIZE, IMAGE_SIZE, focal, principal_point,
+                            camera_rotation_matrix,
+                            camera_translation_vector[:, :, 0],
+                            GROUND_COLOR)
+    object_rotation_dvr = np.array(np.deg2rad(object_rotation),
+                            dtype=np.float32)
+    object_translation_dvr = np.array(object_translation[..., [0, 2, 1]], 
+                                    dtype=np.float32)
+    object_translation_dvr -= np.array([0, 0, helpers.OBJECT_BOTTOM],
+                                        dtype=np.float32)
+
+    rerendering = \
+    helpers.render_voxels_from_blender_camera(object_voxels,
+                                        object_rotation_dvr,
+                                        object_translation_dvr,
+                                        256, 
+                                        256,
+                                        focal,
+                                        principal_point,
+                                        camera_rotation_matrix,
+                                        camera_translation_vector,
+                                        absorption_factor=1.0,
+                                        cell_size=1.1,
+                                        depth_min=3.0,
+                                        depth_max=5.0,
+                                        frustum_size=(128, 128, 128))
+    rerendering_image, rerendering_alpha = tf.split(rerendering, [3, 1], axis=-1)
+
+    rerendering_image = tf.image.resize(rerendering_image, (256, 256))
+    rerendering_alpha = tf.image.resize(rerendering_alpha, (256, 256))
+
+    BACKGROUND_COLOR = 0.784
+    final_composite = BACKGROUND_COLOR*(1-rerendering_alpha)*(1-ground_alpha) + \
+                    ground_image*(1-rerendering_alpha)*ground_alpha + \
+                    rerendering_image*rerendering_alpha
+                    
+    return final_composite,interpolated_voxels
+
+
+def render_tf_forward(object_voxels):
+    
+    final_composite,interpolated_voxels = preprocess(object_voxels)
+    latest_checkpoint = '/tmp/checkpoint/model.ckpt-126650'
+
+    tf.compat.v1.reset_default_graph()
+    g = tf.compat.v1.Graph()
+    with g.as_default():
+        vol_placeholder = tf.compat.v1.placeholder(tf.float32,
+                                            shape=[None, VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE, 4],
+                                            name='input_voxels')
+        rerender_placeholder = tf.compat.v1.placeholder(tf.float32,
+                                                shape=[None, IMAGE_SIZE, IMAGE_SIZE, 3],
+                                                name='rerender')
+        light_placeholder = tf.compat.v1.placeholder(tf.float32,
+                                            shape=[None, 3],
+                                            name='input_light')
+        model = models.neural_voxel_renderer_plus(vol_placeholder,
+                                                    rerender_placeholder,
+                                                    light_placeholder)
+        predicted_image_logits, = model.outputs
+        saver = tf.compat.v1.train.Saver()
+
+    a = interpolated_voxels.numpy()
+    b = final_composite.numpy()*2.-1
+    c = light_position
+    with tf.compat.v1.Session(graph=g) as sess:
+        saver.restore(sess, latest_checkpoint)
+        feed_dict = {vol_placeholder: a,
+                    rerender_placeholder: b,
+                    light_placeholder: c}
+        predictions = sess.run(predicted_image_logits, feed_dict)
+
+    return predictions
+
+def render_tf_backward(object_voxels,upstream_gradient):
+    
+    final_composite,interpolated_voxels = preprocess(object_voxels)
+    latest_checkpoint = '/tmp/checkpoint/model.ckpt-126650'
+
+    tf.compat.v1.reset_default_graph()
+    g = tf.compat.v1.Graph()
+    with g.as_default():
+        vol_placeholder = tf.compat.v1.placeholder(tf.float32,
+                                            shape=[None, VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE, 4],
+                                            name='input_voxels')
+        rerender_placeholder = tf.compat.v1.placeholder(tf.float32,
+                                                shape=[None, IMAGE_SIZE, IMAGE_SIZE, 3],
+                                                name='rerender')
+        light_placeholder = tf.compat.v1.placeholder(tf.float32,
+                                            shape=[None, 3],
+                                            name='input_light')
+        model = models.neural_voxel_renderer_plus(vol_placeholder,
+                                                    rerender_placeholder,
+                                                    light_placeholder)
+        predicted_image_logits, = model.outputs
+                
+        upstream = tf.constant(upstream_gradient)
+        adjusted = tf.reduce_sum(predicted_image_logits*upstream)
+        gradients = tf.gradients(adjusted,vol_placeholder)
+
+        saver = tf.compat.v1.train.Saver()
+
+    a = interpolated_voxels.numpy()
+    b = final_composite.numpy()*2.-1
+    c = light_position
+    with tf.compat.v1.Session(graph=g) as sess:
+        saver.restore(sess, latest_checkpoint)
+        feed_dict = {vol_placeholder: a,
+                    rerender_placeholder: b,
+                    light_placeholder: c}
+        predictions = sess.run(predicted_image_logits, feed_dict)
+        grad = sess.run(gradients, feed_dict)
+        derivs = sess.run(gradients,feed_dict)
+    return derivs[0]
+
 class NVR(torch.autograd.Function):
     
     @staticmethod
     def forward(ctx, object_voxels):
         ctx.save_for_backward(object_voxels)
 
-        object_voxels = process_voxel(object_voxels)
-        
-        interpolated_voxels = estimate_ground_image(object_voxels)
-        
-        ground_image, ground_alpha = \
-            helpers.generate_ground_image(IMAGE_SIZE, IMAGE_SIZE, focal, principal_point,
-                                camera_rotation_matrix,
-                                camera_translation_vector[:, :, 0],
-                                GROUND_COLOR)
-        object_rotation_dvr = np.array(np.deg2rad(object_rotation),
-                                dtype=np.float32)
-        object_translation_dvr = np.array(object_translation[..., [0, 2, 1]], 
-                                        dtype=np.float32)
-        object_translation_dvr -= np.array([0, 0, helpers.OBJECT_BOTTOM],
-                                            dtype=np.float32)
-
-        rerendering = \
-        helpers.render_voxels_from_blender_camera(object_voxels,
-                                            object_rotation_dvr,
-                                            object_translation_dvr,
-                                            256, 
-                                            256,
-                                            focal,
-                                            principal_point,
-                                            camera_rotation_matrix,
-                                            camera_translation_vector,
-                                            absorption_factor=1.0,
-                                            cell_size=1.1,
-                                            depth_min=3.0,
-                                            depth_max=5.0,
-                                            frustum_size=(128, 128, 128))
-        rerendering_image, rerendering_alpha = tf.split(rerendering, [3, 1], axis=-1)
-
-        rerendering_image = tf.image.resize(rerendering_image, (256, 256))
-        rerendering_alpha = tf.image.resize(rerendering_alpha, (256, 256))
-
-        BACKGROUND_COLOR = 0.784
-        final_composite = BACKGROUND_COLOR*(1-rerendering_alpha)*(1-ground_alpha) + \
-                        ground_image*(1-rerendering_alpha)*ground_alpha + \
-                        rerendering_image*rerendering_alpha
-
-        latest_checkpoint = '/tmp/checkpoint/model.ckpt-126650'
-
-        tf.compat.v1.reset_default_graph()
-        g = tf.compat.v1.Graph()
-        with g.as_default():
-            vol_placeholder = tf.compat.v1.placeholder(tf.float32,
-                                                shape=[None, VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE, 4],
-                                                name='input_voxels')
-            rerender_placeholder = tf.compat.v1.placeholder(tf.float32,
-                                                    shape=[None, IMAGE_SIZE, IMAGE_SIZE, 3],
-                                                    name='rerender')
-            light_placeholder = tf.compat.v1.placeholder(tf.float32,
-                                                shape=[None, 3],
-                                                name='input_light')
-            model = models.neural_voxel_renderer_plus(vol_placeholder,
-                                                        rerender_placeholder,
-                                                        light_placeholder)
-            predicted_image_logits, = model.outputs
-            saver = tf.compat.v1.train.Saver()
-
-        a = interpolated_voxels.numpy()
-        b = final_composite.numpy()*2.-1
-        c = light_position
-        with tf.compat.v1.Session(graph=g) as sess:
-            saver.restore(sess, latest_checkpoint)
-            feed_dict = {vol_placeholder: a,
-                        rerender_placeholder: b,
-                        light_placeholder: c}
-            predictions = sess.run(predicted_image_logits, feed_dict)
+        predictions = render_tf_forward(object_voxels)
         #gives nice output if you use matplotlib.pyplot
-        return predictions
+        torch_predictions= torch.from_numpy(predictions).float()
+        
+        return torch_predictions
     
     @staticmethod
     def backward(ctx, grad_output):
-        voxel, = ctx.saved_tensors
-        return torch.ones((128,128,128))
-
-
+        voxel_input = ctx.saved_tensors[0]
+        grad = render_tf_backward(voxel_input,grad_output.numpy())
+        return torch.from_numpy(grad)
     
 if __name__=="__main__":
     #load airplane voxel using numpy
