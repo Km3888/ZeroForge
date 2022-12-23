@@ -95,7 +95,7 @@ def estimate_ground_image(object_voxels):
                                                 translation_vector)
     return interpolated_voxels
 
-def preprocess(object_voxels):
+def og_preprocess(object_voxels):
     object_voxels = process_voxel(object_voxels)
     
     interpolated_voxels = estimate_ground_image(object_voxels)

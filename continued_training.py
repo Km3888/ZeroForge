@@ -16,8 +16,9 @@ from utils import helper
 from utils import visualization
 from utils import experimenter
 
-from scripts.renderer import renderer_dict
-import scripts.renderer.transform as dt
+from rendering.scripts.renderer import renderer_dict
+import rendering.scripts.renderer.transform as dt
+from rendering.nvr_server import NVR_Renderer
 
 import torchvision
 from torchvision.utils import save_image
@@ -114,13 +115,18 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
         out_3d_hard = out_3d.detach() > args.threshold
         rgbs_hard = []
         for i in range(batch_size):
-            angles=[]
-            rand_rotate_i_hard =  rotation.rotate_random(out_3d_hard[i].float().unsqueeze(0).unsqueeze(0))
-            for axis in range(3):
-                out_2d_i_hard = renderer.render(volume=rand_rotate_i_hard.squeeze(),axis=axis).double()                
-                angles.append(out_2d_i_hard.unsqueeze(0))
-            rgbs_hard.append(torch.stack(angles,dim=0).unsqueeze(0))
-    
+            if args.renderer=='ea':
+                #Currently only doing all 3 angles for ea, could try something similar
+                #for nvr+ once I understand the camera angle better
+                angles=[]
+                out_3d_hard[i] =  rotation.rotate_random(out_3d_hard[i].float().unsqueeze(0).unsqueeze(0))
+                for axis in range(3):
+                    out_2d_i_hard = renderer.render(volume=out_3d_hard[i].squeeze(),axis=axis).double()                
+                    angles.append(out_2d_i_hard.unsqueeze(0))
+                rgbs_hard.append(torch.stack(angles,dim=0).unsqueeze(0))
+            else:
+                out_2d_i_hard = renderer.render(out_3d_hard[i].squeeze()).double()  
+                rgbs_hard.append(out_2d_i_hard.unsqueeze(0))
         rgbs_hard = torch.cat(rgbs_hard,0)
         rgbs_hard = rgbs_hard.expand(-1,-1, 3,-1,-1).view(batch_size*3,3,voxel_size,voxel_size)
         rgbs_hard = resizer(rgbs_hard)
@@ -138,12 +144,16 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
     
     rgbs = []
     for i in range(batch_size):
-        rand_rotate_i =  rotation.rotate_random(out_3d_soft[i].float().unsqueeze(0).unsqueeze(0))
-        angles=[]
-        for axis in range(3):
-            out_2d_i = renderer.render(volume=rand_rotate_i.squeeze(),axis=axis).double()            
-            angles.append(out_2d_i.unsqueeze(0))
-        rgbs.append(torch.stack(angles,dim=0).unsqueeze(0))        
+        if args.renderer=='ea':
+            out_3d_soft[i] =  rotation.rotate_random(out_3d_soft[i].float().unsqueeze(0).unsqueeze(0))
+            angles=[]
+            for axis in range(3):
+                out_2d_i = renderer.render(volume=out_3d_soft[i].squeeze(),axis=axis).double()            
+                angles.append(out_2d_i.unsqueeze(0))
+            rgbs.append(torch.stack(angles,dim=0).unsqueeze(0))
+        else:
+            rgb = renderer.render(out_3d_soft[i].squeeze()).double()
+            rgbs.append(rgb)
     
     rgbs = torch.cat(rgbs,0)
     rgbs = rgbs.expand(-1,-1, 3,-1,-1).view(batch_size*3,3,voxel_size,voxel_size)
@@ -202,6 +212,8 @@ def get_local_parser(mode="args"):
     parser.add_argument("--query_array",  type=str, default=None, help='multiple queries') 
     parser.add_argument("--uninitialized",  type=bool, default=False, help='Use untrained networks')
     parser.add_argument("--num_voxels",  type=int, default=32, help='number of voxels')
+    # parser.add_argument("--threshold",  type=float, default=0.5, help='threshold for voxelization')
+    parser.add_argument("--renderer",  type=str, default='ea')
     if mode == "args":
         args = parser.parse_args()
         return args
@@ -264,8 +276,10 @@ def main(args):
         latent_flow_network.load_state_dict(checkpoint['model'])
     
     param_dict={'device':args.device,'cube_len':args.num_voxels}
-    renderer=renderer_dict['absorption_only'](param=param_dict)
-    
+    if args.renderer == 'ea':
+        renderer=renderer_dict['absorption_only'](param=param_dict)
+    elif args.renderer == 'nvr+':
+        renderer = NVR_Renderer()
     test_train(args,clip_model,net,latent_flow_network,renderer)
     
 query_arrays = {
@@ -282,4 +296,5 @@ if __name__=="__main__":
     args=get_local_parser()
     if args.use_tensorboard:
         writer=SummaryWriter(comment='_%s_lr=%s_beta=%s_gpu=%s_baseline=%s_v=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized,args.num_voxels))
+    assert args.renderer in ['ea','nvr+']
     main(args)

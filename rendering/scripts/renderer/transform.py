@@ -2,7 +2,7 @@ import torch
 import numpy as np
 import scipy.ndimage
 import math
-import scripts.utils.utils as utils
+import rendering.scripts.utils.utils as utils
 
 
 class Transform():

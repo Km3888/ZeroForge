@@ -7,8 +7,8 @@ from tensorflow_graphics.projects.neural_voxel_renderer import helpers
 from tensorflow_graphics.projects.neural_voxel_renderer import models
 from tensorflow_graphics.rendering.volumetric import visual_hull
 
-from preprocess import diff_preprocess
-
+from rendering.preprocess import diff_preprocess
+from rendering.preprocess import og_preprocess
 camera_rotation_matrix= np.array([[ 9.9997330e-01,  7.3080887e-03,  8.9461202e-11],\
     [ 4.9256836e-03, -6.7398632e-01, -7.3872751e-01],\
     [-5.3986851e-03,  7.3870778e-01, -6.7400432e-01]]).astype(np.float32)
@@ -127,7 +127,6 @@ class NVR(torch.autograd.Function):
         print('backward sizes:')
         print(d_composite.shape)
         print(d_interpolated.shape)
-        import pdb;pdb.set_trace()
         return torch.from_numpy(d_composite).to('cuda:0'),torch.from_numpy(d_interpolated).to('cuda:0')
 
 
@@ -138,13 +137,9 @@ class NVR_Renderer:
     
     def render(self,voxels):
         #TODO randomize light and camera angles
-        final_composite,interpolated_voxels = diff_preprocess(voxels)
-        final_composite.retain_grad=True
-        interpolated_voxels.retain_grad=True
+        final_composite,interpolated_voxels = og_preprocess(voxels)
         output=NVR.apply(final_composite,interpolated_voxels)
-        output.retain_grad=True
         permuted_output=output.permute(0,3,1,2)
-        permuted_output.retain_grad=True
         return permuted_output
         
     def render_backward(self,voxels,upstream_gradient):
@@ -170,6 +165,17 @@ if __name__=="__main__":
     output=renderer.render(new_voxel)
     print('hello')
     
-    output.sum().backward()
+    import matplotlib.pyplot as plt
+    view = 0 #@param {type:"slider", min:0, max:9, step:1}
+
+    permuted_output = output.permute(0,3,2,1)
+    
+    _, ax = plt.subplots(1, 1, figsize=(5, 5))
+    ax.imshow(permuted_output.squeeze().detach().cpu()*0.5+0.5)
+    ax.axis('off')
+    ax.set_title('NVR+ prediction')
+    plt.savefig('nvr_wineglass.png')
+    plt.show()
+    # output.sum().backward()
     
     print(voxel.grad)

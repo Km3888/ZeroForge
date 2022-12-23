@@ -225,6 +225,7 @@ class NVR(torch.autograd.Function):
     
     @staticmethod
     def backward(ctx, grad_output):
+        import pdb; pdb.set_trace()
         voxel_input = ctx.saved_tensors[0]
         grad = render_tf_backward(voxel_input,grad_output.numpy())
         return torch.from_numpy(grad)
