@@ -97,9 +97,9 @@ def estimate_ground_image(object_voxels):
 
 def preprocess(object_voxels):
     object_voxels = process_voxel(object_voxels)
-        
-    interpolated_voxels = estimate_ground_image(object_voxels)
     
+    interpolated_voxels = estimate_ground_image(object_voxels)
+
     ground_image, ground_alpha = \
         helpers.generate_ground_image(IMAGE_SIZE, IMAGE_SIZE, focal, principal_point,
                             camera_rotation_matrix,
@@ -126,7 +126,7 @@ def preprocess(object_voxels):
                                         cell_size=1.1,
                                         depth_min=3.0,
                                         depth_max=5.0,
-                                        frustum_size=(128, 128, 128))
+                                         frustum_size=(128, 128, 128))
     rerendering_image, rerendering_alpha = tf.split(rerendering, [3, 1], axis=-1)
 
     rerendering_image = tf.image.resize(rerendering_image, (256, 256))
@@ -136,7 +136,7 @@ def preprocess(object_voxels):
     final_composite = BACKGROUND_COLOR*(1-rerendering_alpha)*(1-ground_alpha) + \
                     ground_image*(1-rerendering_alpha)*ground_alpha + \
                     rerendering_image*rerendering_alpha
-                    
+    
     return final_composite,interpolated_voxels
 
 def diff_object_to_world(voxels,
@@ -160,8 +160,6 @@ def diff_object_to_world(voxels,
     translation_vector = tf.matmul(transf_matrix, translation_vector)  # [B, 3, 1]
     sampling_points = sampling_points - translation_vector
     sampling_points = tf.linalg.matrix_transpose(sampling_points)
-    sampling_points = helpers.sampling_points_to_voxel_index(sampling_points,
-                                                    target_volume_size)
     sampling_points = tf.cast(sampling_points, tf.float32)
 
     #okay now we care about differentiability so convert to PyTorch and put on GPU
@@ -186,11 +184,7 @@ def diff_estimate_ground_image(object_voxels):
     interpolated_voxels = diff_object_to_world(scene_voxels,
                                                 euler_angles_x,
                                                 euler_angles_y,
-    
-                                                    translation_vector)
-    
-    
-    
+                                                translation_vector)    
     return interpolated_voxels
     
 def diff_load_voxel(voxel):
@@ -239,8 +233,6 @@ def diff_render_voxels_from_blender_camera(voxels,
     # Adjust the camera (translate the camera instead of the object)
     sampling_volume = sampling_volume - object_translation
     sampling_volume = sampling_volume/helpers.CUBE_BOX_DIM
-    sampling_volume = helpers.sampling_points_to_voxel_index(sampling_volume, voxel_size)
-
     sampling_tensor = torch.from_numpy(sampling_volume.numpy()).to('cuda:0')
     sampling_tensor = sampling_tensor.view(-1,128,128,128,3)
     
@@ -293,8 +285,6 @@ def diff_transform_volume(voxels, transformation_matrix,voxel_size = (128,128,12
                                 tf.transpose(a=volume_sampling))
     volume_sampling = tf.cast(tf.linalg.matrix_transpose(volume_sampling),
                                 tf.float32)
-    volume_sampling = helpers.sampling_points_to_voxel_index(volume_sampling, voxel_size)
-    # interpolated_voxels = trilinear.interpolate(voxels, volume_sampling)
     permuted_voxels = voxels.permute(0,4,1,2,3)
     sampling_tensor = torch.tensor(volume_sampling.numpy(),dtype=torch.float32).to('cuda:0')
     sampling_tensor = sampling_tensor.view(-1,128,128,128,3)
@@ -363,7 +353,7 @@ if __name__=='__main__':
     torch_voxel = torch.from_numpy(voxel).to('cuda:0').float()
     torch_voxel.requires_grad=True
     
-    # output = preprocess(torch_voxel)
+    # output = og_preprocess(torch_voxel)
     final_composite,interpolated_voxels = diff_preprocess(torch_voxel)
     
     print('hello')
