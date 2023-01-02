@@ -7,34 +7,11 @@ from tensorflow_graphics.projects.neural_voxel_renderer import helpers
 from tensorflow_graphics.projects.neural_voxel_renderer import models
 from tensorflow_graphics.rendering.volumetric import visual_hull
 
-from rendering.preprocess import diff_preprocess
-from rendering.preprocess import og_preprocess
-camera_rotation_matrix= np.array([[ 9.9997330e-01,  7.3080887e-03,  8.9461202e-11],\
-    [ 4.9256836e-03, -6.7398632e-01, -7.3872751e-01],\
-    [-5.3986851e-03,  7.3870778e-01, -6.7400432e-01]]).astype(np.float32)
-camera_translation_vector = np.array([[5.2963998e-09],\
-    [5.3759331e-01],\
-    [4.2457557e+00]]).astype(np.float32)
-focal = np.array([284.44446, 284.44446]).astype(np.float32)
-principal_point = np.array([128., 128.]).astype(np.float32)
+from preprocess import diff_preprocess
+from preprocess import og_preprocess
+
 light_position = np.array([-1.0901234 ,  0.01720496,  2.6110773 ]).astype(np.float32)
-object_rotation = np.array([139.]).astype(np.float32)
-object_translation = np.array([-0.39401,  0.,  0.4]).astype(np.float32)
-object_elevation = np.array([47.62312]).astype(np.float32)
-
-camera_rotation_matrix=np.expand_dims(camera_rotation_matrix,axis=(0))
-camera_translation_vector=np.expand_dims(camera_translation_vector,axis=(0)).astype(np.float32)
 light_position = np.expand_dims(light_position,axis=(0)).astype(np.float32)
-
-object_translation=np.expand_dims(object_translation,axis=(0,1))
-object_rotation=np.expand_dims(object_rotation,axis=(0))
-object_elevation=np.expand_dims(object_elevation,axis=(0))
-
-#convert object arrays to float32 datatype
-object_translation=object_translation.astype(np.float32)
-object_rotation=object_rotation.astype(np.float32)
-object_elevation=object_elevation.astype(np.float32)
-
 
 VOXEL_SIZE = 128
 IMAGE_SIZE = 256
@@ -135,16 +112,15 @@ class NVR_Renderer:
     def __init__(self):
         pass
     
-    def render(self,voxels):
+    def render(self,voxels,angle=139.):
         #TODO randomize light and camera angles
-        final_composite,interpolated_voxels = og_preprocess(voxels)
+        angle=np.expand_dims(angle,axis=(0)).astype(np.float32)
+        final_composite,interpolated_voxels = diff_preprocess(voxels,angle)
+        final_composite = final_composite.permute(0,2,3,1)
         output=NVR.apply(final_composite,interpolated_voxels)
         permuted_output=output.permute(0,3,1,2)
         return permuted_output
-        
-    def render_backward(self,voxels,upstream_gradient):
-        pass
-        
+                
 if __name__=="__main__":
     path="airplane_128.npy"
     with open(path, 'rb') as f:
@@ -153,8 +129,8 @@ if __name__=="__main__":
     voxel.requires_grad=True
     
     renderer = NVR_Renderer()
-    output=renderer.render(voxel)
-    print('hello')
+    # output=renderer.render(voxel,0)
+    # print('hello')
     
     path="airplane_128.npy"
     with open(path, 'rb') as f:
@@ -162,13 +138,14 @@ if __name__=="__main__":
     new_voxel = torch.from_numpy(new_voxel).float().to('cuda:0')
     new_voxel.requires_grad=True
     
+    new_voxel = torch.stack([voxel,new_voxel],dim=0)
     output=renderer.render(new_voxel)
     print('hello')
     
     import matplotlib.pyplot as plt
     view = 0 #@param {type:"slider", min:0, max:9, step:1}
 
-    permuted_output = output.permute(0,3,2,1)
+    permuted_output = output.permute(0,2,3,1)
     
     _, ax = plt.subplots(1, 1, figsize=(5, 5))
     ax.imshow(permuted_output.squeeze().detach().cpu()*0.5+0.5)

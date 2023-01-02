@@ -1,3 +1,4 @@
+import argparse
 import numpy as np
 import torch
 import tensorflow as tf
@@ -11,7 +12,6 @@ from tensorflow_graphics.rendering.volumetric import visual_hull
 
 from tensorflow_graphics.geometry.representation import grid
 from tensorflow_graphics.geometry.transformation import rotation_matrix_3d
-from tensorflow_graphics.math.interpolation import trilinear
 
 if True:
     camera_rotation_matrix= np.array([[ 9.9997330e-01,  7.3080887e-03,  8.9461202e-11],\
@@ -23,21 +23,18 @@ if True:
     focal = np.array([284.44446, 284.44446]).astype(np.float32)
     principal_point = np.array([128., 128.]).astype(np.float32)
     light_position = np.array([-1.0901234 ,  0.01720496,  2.6110773 ]).astype(np.float32)
-    object_rotation = np.array([139.]).astype(np.float32)
     object_translation = np.array([-0.39401,  0.,  0.4]).astype(np.float32)
     object_elevation = np.array([47.62312]).astype(np.float32)
-
+    
     camera_rotation_matrix=np.expand_dims(camera_rotation_matrix,axis=(0))
     camera_translation_vector=np.expand_dims(camera_translation_vector,axis=(0)).astype(np.float32)
     light_position = np.expand_dims(light_position,axis=(0)).astype(np.float32)
 
     object_translation=np.expand_dims(object_translation,axis=(0,1))
-    object_rotation=np.expand_dims(object_rotation,axis=(0))
     object_elevation=np.expand_dims(object_elevation,axis=(0))
 
     #convert object arrays to float32 datatype
     object_translation=object_translation.astype(np.float32)
-    object_rotation=object_rotation.astype(np.float32)
     object_elevation=object_elevation.astype(np.float32)
 
 
@@ -58,9 +55,9 @@ def process_voxel(voxel):
     
     return expanded
 
-def make_arrays():
+def make_arrays(angle):
     #helper function for estimate_ground_image
-    object_rotation_v = object_rotation
+    object_rotation_v = angle
     object_translation_v = object_translation[:, 0, [1, 0, 2]]*BLENDER_SCALE
     object_elevation_v = object_elevation
 
@@ -82,9 +79,9 @@ def make_arrays():
 
     return ground_occupancy,ground_voxel_color,euler_angles_x,euler_angles_y,translation_vector
     
-def estimate_ground_image(object_voxels):
+def estimate_ground_image(object_voxels,angle):
     ground_occupancy,ground_voxel_color,euler_angles_x,\
-        euler_angles_y,translation_vector = make_arrays()
+        euler_angles_y,translation_vector = make_arrays(angle)
     
     scene_voxels = object_voxels*(1-ground_occupancy) + \
                     ground_voxel_color*ground_occupancy
@@ -95,17 +92,17 @@ def estimate_ground_image(object_voxels):
                                                 translation_vector)
     return interpolated_voxels
 
-def og_preprocess(object_voxels):
+def og_preprocess(object_voxels,angle=139):
     object_voxels = process_voxel(object_voxels)
     
-    interpolated_voxels = estimate_ground_image(object_voxels)
+    interpolated_voxels = estimate_ground_image(object_voxels,angle)
 
     ground_image, ground_alpha = \
         helpers.generate_ground_image(IMAGE_SIZE, IMAGE_SIZE, focal, principal_point,
                             camera_rotation_matrix,
                             camera_translation_vector[:, :, 0],
                             GROUND_COLOR)
-    object_rotation_dvr = np.array(np.deg2rad(object_rotation),
+    object_rotation_dvr = np.array(np.deg2rad(angle),
                             dtype=np.float32)
     object_translation_dvr = np.array(object_translation[..., [0, 2, 1]], 
                                     dtype=np.float32)
@@ -171,9 +168,9 @@ def diff_object_to_world(voxels,
     
     return interpolated_points.permute(0,2,3,4,1)    # return interpolated_voxels
 
-def diff_estimate_ground_image(object_voxels):    
+def diff_estimate_ground_image(object_voxels,angle):    
     ground_occupancy,ground_voxel_color,euler_angles_x,\
-        euler_angles_y,translation_vector = make_arrays()
+        euler_angles_y,translation_vector = make_arrays(angle)
         
     #convert arrays to pytorch and put them on cuda:0
     ground_occupancy = torch.from_numpy(ground_occupancy).to('cuda:0')
@@ -292,9 +289,9 @@ def diff_transform_volume(voxels, transformation_matrix,voxel_size = (128,128,12
     output = output.permute(0,2,3,4,1)
     return output
 
-def diff_preprocess(object_voxels):
+def diff_preprocess(object_voxels,angle=139.):
     object_voxels = diff_load_voxel(object_voxels)
-    interpolated_voxels = diff_estimate_ground_image(object_voxels)
+    interpolated_voxels = diff_estimate_ground_image(object_voxels,angle)
 
     ground_image, ground_alpha = \
         helpers.generate_ground_image(IMAGE_SIZE, IMAGE_SIZE, focal, principal_point,
@@ -308,7 +305,7 @@ def diff_preprocess(object_voxels):
     ground_alpha = ground_alpha.permute(0,3,1,2)
     
     
-    object_rotation_dvr = np.array(np.deg2rad(object_rotation),
+    object_rotation_dvr = np.array(np.deg2rad(angle),
                             dtype=np.float32)
     object_translation_dvr = np.array(object_translation[..., [0, 2, 1]], 
                                     dtype=np.float32)
@@ -346,14 +343,33 @@ def diff_preprocess(object_voxels):
                     
     return final_composite,interpolated_voxels
 
+def save_output(output, path):
+    view = 0 #@param {type:"slider", min:0, max:9, step:1}
+    
+    _, ax = plt.subplots(1, 1, figsize=(5, 5))
+    ax.imshow(output.squeeze().detach().cpu()*0.5+0.5)
+    ax.axis('off')
+    ax.set_title('NVR+ prediction')
+    plt.savefig(path)
+    plt.show()
+
 if __name__=='__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--differentiable', action='store_true')
+    args = parser.parse_args()
+
     path="airplane_128.npy"
     with open(path, 'rb') as f:
         voxel = np.load(f)
     torch_voxel = torch.from_numpy(voxel).to('cuda:0').float()
     torch_voxel.requires_grad=True
     
-    # output = og_preprocess(torch_voxel)
-    final_composite,interpolated_voxels = diff_preprocess(torch_voxel)
+    if not args.differentiable:
+        final_composite,interpolated_voxels = og_preprocess(torch_voxel)
+        final_composite = torch.tensor(final_composite.numpy(),dtype=torch.float32).to('cuda:0')
+    else:
+        final_composite,interpolated_voxels = diff_preprocess(torch_voxel)
+        final_composite = final_composite.permute(0,2,3,1)
     
-    print('hello')
+    # render and save final-composite
+    save_output(final_composite,"preprocess_diff=%s.png" % args.differentiable)
