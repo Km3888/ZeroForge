@@ -130,7 +130,7 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
             writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
     
     #REFACTOR put all these into a single method which works for hard or soft
-    rgbs = renderer.render(volume=out_3d_soft).double()            
+    rgbs = renderer.render(out_3d_soft).double()            
     rgbs = resizer(rgbs)
         
     return text_features,rgbs
