@@ -7,8 +7,7 @@ from tensorflow_graphics.projects.neural_voxel_renderer import helpers
 from tensorflow_graphics.projects.neural_voxel_renderer import models
 from tensorflow_graphics.rendering.volumetric import visual_hull
 
-from preprocess import diff_preprocess
-from preprocess import og_preprocess
+from rendering.preprocess import diff_preprocess,og_preprocess
 
 light_position = np.array([-1.0901234 ,  0.01720496,  2.6110773 ]).astype(np.float32)
 light_position = np.expand_dims(light_position,axis=(0)).astype(np.float32)
@@ -54,7 +53,7 @@ def render_tf_forward(final_composite,interpolated_voxels):
     batch_size = interpolated_voxels.shape[0]
     a = interpolated_voxels.cpu().numpy()
     b = final_composite.cpu().numpy()*2.-1 #TODO account for this
-    c = light_position
+    c = np.stack(batch_size*[light_position.squeeze()])
     d = np.zeros((batch_size,256,256,3))
     with tf.compat.v1.Session(graph=g) as sess:
         saver.restore(sess, latest_checkpoint)
@@ -120,7 +119,27 @@ class NVR_Renderer:
         output=NVR.apply(final_composite,interpolated_voxels)
         permuted_output=output.permute(0,3,1,2)
         return permuted_output
-                
+
+def test_nvr():
+    path="airplane_128.npy"
+    with open(path, 'rb') as f:
+        voxel = np.load(f)
+    voxel = torch.from_numpy(voxel).float().to('cuda:0')
+    voxel.requires_grad=True
+    
+    renderer = NVR_Renderer()
+    # output=renderer.render(voxel,0)
+    # print('hello')
+    
+    path="airplane_128.npy"
+    with open(path, 'rb') as f:
+        new_voxel = np.load(f)
+    new_voxel = torch.from_numpy(new_voxel).float().to('cuda:0')
+    new_voxel.requires_grad=True
+    
+    new_voxel = torch.stack([voxel,new_voxel],dim=0)
+    output=renderer.render(new_voxel)
+
 if __name__=="__main__":
     path="airplane_128.npy"
     with open(path, 'rb') as f:

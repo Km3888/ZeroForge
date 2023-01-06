@@ -163,7 +163,10 @@ def diff_object_to_world(voxels,
     sampling_points = torch.from_numpy(sampling_points.numpy()).to('cuda:0')
 
     sampling_points = sampling_points.view(-1,128,128,128,3)
+    sampling_points = sampling_points.expand(voxels.shape[0],-1,-1,-1,-1)
+
     voxels = voxels.permute(0,4,1,2,3)
+
     interpolated_points = torch.nn.functional.grid_sample(voxels, sampling_points,mode='bilinear')
     
     return interpolated_points.permute(0,2,3,4,1)    # return interpolated_voxels
@@ -223,7 +226,6 @@ def diff_render_voxels_from_blender_camera(voxels,
     helpers.place_frustum_sampling_points_at_blender_camera(sampling_volume,
                                                     camera_rotation_matrix,
                                                     camera_translation_vector)
-    #TODO translate to pytorch
     interpolated_voxels = \
     diff_object_rotation_in_blender_world(voxels, object_rotation)
 
@@ -234,6 +236,8 @@ def diff_render_voxels_from_blender_camera(voxels,
     sampling_tensor = sampling_tensor.view(-1,128,128,128,3)
     
     interpolated_voxels = interpolated_voxels.permute(0,4,1,2,3)
+
+    sampling_tensor = sampling_tensor.expand(batch_size,-1,-1,-1,-1)
     camera_voxels = torch.nn.functional.grid_sample(interpolated_voxels, sampling_tensor,mode='bilinear')
     camera_voxels = camera_voxels.permute(0,2,3,4,1)
     voxel_image = ea_render(camera_voxels,
@@ -285,6 +289,8 @@ def diff_transform_volume(voxels, transformation_matrix,voxel_size = (128,128,12
     permuted_voxels = voxels.permute(0,4,1,2,3)
     sampling_tensor = torch.tensor(volume_sampling.numpy(),dtype=torch.float32).to('cuda:0')
     sampling_tensor = sampling_tensor.view(-1,128,128,128,3)
+    sampling_tensor = sampling_tensor.expand(voxels.shape[0],-1,-1,-1,-1)
+
     output = torch.nn.functional.grid_sample(permuted_voxels,sampling_tensor)
     output = output.permute(0,2,3,4,1)
     return output
