@@ -10,13 +10,13 @@ class BaselineRenderer:
         
     def render(self,volume):
         outputs=[]
-        rotated = self.rotation.rotate_random(volume).squeeze()
+        rotated = self.rotation.rotate_random(volume.unsqueeze(1)).squeeze()
         for axis in range(3):
             output = self.renderer.render(rotated,axis)
             outputs.append(output)
         
-        return torch.stack(outputs,dim=0).double()
-    
+        stacked = torch.stack(outputs,dim=0).double()
+        return stacked.unsqueeze(1).expand(-1, 3,-1,-1)    
     
 def test_baseline_renderer():
     path="airplane_128.npy"

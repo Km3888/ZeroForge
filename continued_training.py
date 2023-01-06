@@ -16,9 +16,8 @@ from utils import helper
 from utils import visualization
 from utils import experimenter
 
-from rendering.scripts.renderer import renderer_dict
-import rendering.scripts.renderer.transform as dt
 from rendering.nvr_server import NVR_Renderer
+from rendering.baseline_renderer import BaselineRenderer
 
 import torchvision
 from torchvision.utils import save_image
@@ -30,10 +29,10 @@ import PIL
 
 
 
-def clip_loss(args,query_array,clip_model,autoencoder,latent_flow_model,renderer,rotation,resizer,iter,text_features=None):
+def clip_loss(args,query_array,clip_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features=None):
     # text_emb,ims = generate_single_query(args,clip_model,autoencoder,latent_flow_model,renderer,query,args.batch_size,rotation,resizer,iter)
     
-    text_embs,ims = generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,renderer,query_array,rotation,resizer,iter,text_features=text_features)
+    text_embs,ims = generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,renderer,query_array,resizer,iter,text_features=text_features)
     
     im_embs=clip_model.encode_image(ims)
     text_embs=text_embs.unsqueeze(1).expand(-1,3,-1).reshape(-1,512)
@@ -88,14 +87,14 @@ def get_text_embeddings(args,clip_model,query_array):
 
     return text_features
 
-def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,renderer,query_array,rotation,resizer,iter,text_features=None):
+def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,renderer,query_array,resizer,iter,text_features=None):
     clip_model.eval()
     autoencoder.train()
     latent_flow_model.eval() # has to be in .eval() mode for the sampling to work (which is bad but whatever)
     
     voxel_size = args.num_voxels
     batch_size = len(query_array)
-    
+        
     shape = (voxel_size, voxel_size, voxel_size)
     p = visualization.make_3d_grid([-0.5] * 3, [+0.5] * 3, shape).type(torch.FloatTensor).to(args.device)
     query_points = p.expand(batch_size, *p.size())
@@ -104,7 +103,11 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
     if text_features is None:
         text_features = get_text_embeddings(args,clip_model,query_array)
         text_features = text_features.clone()
-        
+    #REFACTOR compute text_features outside this method
+    
+    if len(query_array)==1:
+        batch_size = args.batch_size
+        text_features = text_features.expand(batch_size,-1)
     noise = torch.Tensor(batch_size, args.emb_dims).normal_().to(args.device)
     decoder_embs = latent_flow_model.sample(batch_size, noise=noise, cond_inputs=text_features)
     
@@ -113,22 +116,14 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
    
     if not iter%50:
         out_3d_hard = out_3d.detach() > args.threshold
-        rgbs_hard = []
+        rgbs_hard_array = []
         for i in range(batch_size):
-            if args.renderer=='ea':
-                #Currently only doing all 3 angles for ea, could try something similar
-                #for nvr+ once I understand the camera angle better
-                angles=[]
-                out_3d_hard[i] =  rotation.rotate_random(out_3d_hard[i].float().unsqueeze(0).unsqueeze(0))
-                for axis in range(3):
-                    out_2d_i_hard = renderer.render(volume=out_3d_hard[i].squeeze(),axis=axis).double()                
-                    angles.append(out_2d_i_hard.unsqueeze(0))
-                rgbs_hard.append(torch.stack(angles,dim=0).unsqueeze(0))
-            else:
-                out_2d_i_hard = renderer.render(out_3d_hard[i].squeeze()).double()  
-                rgbs_hard.append(out_2d_i_hard.unsqueeze(0))
-        rgbs_hard = torch.cat(rgbs_hard,0)
-        rgbs_hard = rgbs_hard.expand(-1,-1, 3,-1,-1).view(batch_size*3,3,voxel_size,voxel_size)
+            #Currently only doing all 3 angles for ea, could try something similar
+            #for nvr+ once I understand the camera angle better
+            #renderer expects [batch,voxel_size,voxel_size,voxel_size]    
+            angles = renderer.render(out_3d_hard[i].float().unsqueeze(0)).double()
+            rgbs_hard_array.append(angles)
+        rgbs_hard = torch.cat(rgbs_hard_array,0)
         rgbs_hard = resizer(rgbs_hard)
         
         hard_im_embeddings = clip_model.encode_image(rgbs_hard)
@@ -141,27 +136,15 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
             writer.add_scalar('Loss/hard_loss', hard_loss, iter)
             writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
     
-    
-    rgbs = []
+    #REFACTOR put all these into a single method which works for hard or soft
+    rgbs_array = []
     for i in range(batch_size):
-        if args.renderer=='ea':
-            out_3d_soft[i] =  rotation.rotate_random(out_3d_soft[i].float().unsqueeze(0).unsqueeze(0)).clone()
-            angles=[]
-            for axis in range(3):
-                out_2d_i = renderer.render(volume=out_3d_soft[i].squeeze(),axis=axis).double()            
-                angles.append(out_2d_i.unsqueeze(0))
-            rgbs.append(torch.stack(angles,dim=0).unsqueeze(0))
-        else:
-            rgb = renderer.render(out_3d_soft[i].squeeze()).double()
-            rgbs.append(rgb)
+        angles = renderer.render(volume=out_3d_soft[i].unsqueeze(0)).double()            
+        rgbs_array.append(angles)
     
-    rgbs = torch.cat(rgbs,0)
-    rgbs = rgbs.expand(-1,-1, 3,-1,-1).view(batch_size*3,3,voxel_size,voxel_size)
+    rgbs = torch.cat(rgbs_array,0)
     rgbs =  resizer(rgbs)
-    
-    # clip_embs = clip_model.encode_image(rgbs)
-    # save_image(out_2d_1, "rotated_car_out_2d_1.png")
-    
+        
     return text_features,rgbs
     
 
@@ -221,7 +204,6 @@ def get_local_parser(mode="args"):
         return parser
 
 def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):    
-    rotation = dt.Transform(args.device)
     resizer = T.Resize(224)
     flow_optimizer=optim.Adam(latent_flow_model.parameters(), lr=args.learning_rate)
     net_optimizer=optim.Adam(autoencoder.parameters(), lr=args.learning_rate)
@@ -243,7 +225,7 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         flow_optimizer.zero_grad()
         net_optimizer.zero_grad()
         
-        loss = clip_loss(args,query_array,clip_model,autoencoder,latent_flow_model,renderer,rotation,resizer,iter,text_features)        
+        loss = clip_loss(args,query_array,clip_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features)        
         
         loss.backward()
                 
@@ -277,7 +259,7 @@ def main(args):
     
     param_dict={'device':args.device,'cube_len':args.num_voxels}
     if args.renderer == 'ea':
-        renderer=renderer_dict['absorption_only'](param=param_dict)
+        renderer=BaselineRenderer('absorption_only',param_dict)
     elif args.renderer == 'nvr+':
         renderer = NVR_Renderer()
     test_train(args,clip_model,net,latent_flow_network,renderer)
@@ -291,6 +273,7 @@ query_arrays = {
                 "nine": ['wineglass','spoon','fork','knife','screwdriver','hammer',"soccer ball", "football","plate"],
                 "fourteen": ["wineglass','spoon','fork','knife','screwdriver','hammer","pencil","screw","screwdriver","plate","mushroom","umbrella","thimble","sombrero","sandal"]
 }
+#REFACTOR put query arrays in a separate file
 
 if __name__=="__main__":
     args=get_local_parser()
