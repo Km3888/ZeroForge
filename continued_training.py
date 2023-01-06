@@ -33,7 +33,7 @@ def clip_loss(args,query_array,clip_model,autoencoder,latent_flow_model,renderer
     # text_emb,ims = generate_single_query(args,clip_model,autoencoder,latent_flow_model,renderer,query,args.batch_size,rotation,resizer,iter)
     
     text_embs,ims = generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,renderer,query_array,resizer,iter,text_features=text_features)
-    
+    im= im.to('cuda:0')
     im_embs=clip_model.encode_image(ims)
     text_embs=text_embs.unsqueeze(1).expand(-1,3,-1).reshape(-1,512)
     losses=-1*torch.cosine_similarity(text_embs,im_embs)
