@@ -116,14 +116,10 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
    
     if not iter%50:
         out_3d_hard = out_3d.detach() > args.threshold
-        rgbs_hard_array = []
-        for i in range(batch_size):
-            #Currently only doing all 3 angles for ea, could try something similar
-            #for nvr+ once I understand the camera angle better
-            #renderer expects [batch,voxel_size,voxel_size,voxel_size]    
-            angles = renderer.render(out_3d_hard[i].float().unsqueeze(0)).double()
-            rgbs_hard_array.append(angles)
-        rgbs_hard = torch.cat(rgbs_hard_array,0)
+        #Currently only doing all 3 angles for ea, could try something similar
+        #for nvr+ once I understand the camera angle better
+        #renderer expects [batch,voxel_size,voxel_size,voxel_size]    
+        rgbs_hard = renderer.render(out_3d_hard.float()).double()
         rgbs_hard = resizer(rgbs_hard)
         
         hard_im_embeddings = clip_model.encode_image(rgbs_hard)
@@ -137,12 +133,7 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
             writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
     
     #REFACTOR put all these into a single method which works for hard or soft
-    rgbs_array = []
-    for i in range(batch_size):
-        angles = renderer.render(volume=out_3d_soft[i].unsqueeze(0)).double()            
-        rgbs_array.append(angles)
-    
-    rgbs = torch.cat(rgbs_array,0)
+    rgbs = renderer.render(volume=out_3d_soft).double()            
     rgbs =  resizer(rgbs)
         
     return text_features,rgbs

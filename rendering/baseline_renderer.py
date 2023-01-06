@@ -11,11 +11,11 @@ class BaselineRenderer:
     def render(self,volume):
         outputs=[]
         rotated = self.rotation.rotate_random(volume.unsqueeze(1)).squeeze()
-        for axis in range(3):
+        for axis in range(1,4):
             output = self.renderer.render(rotated,axis)
             outputs.append(output)
         
-        stacked = torch.stack(outputs,dim=0).double()
+        stacked = torch.cat(outputs,dim=0).double()
         return stacked.unsqueeze(1).expand(-1, 3,-1,-1)    
     
 def test_baseline_renderer():

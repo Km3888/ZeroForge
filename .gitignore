@@ -62,3 +62,6 @@ chair_voxel_128_vis.png
 wineglass_render.png
 lamp_render.png
 requirements.txt
+nvr_wineglass.png
+preprocess_diff=False.png
+preprocess_diff=True.png
