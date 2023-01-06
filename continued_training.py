@@ -116,7 +116,7 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
         #Currently only doing all 3 angles for ea, could try something similar
         #for nvr+ once I understand the camera angle better
         #renderer expects [batch,voxel_size,voxel_size,voxel_size]    
-        rgbs_hard = renderer.render(out_3d_hard.float()).double()
+        rgbs_hard = renderer.render(out_3d_hard.float()).double().to('cuda:0')
         rgbs_hard = resizer(rgbs_hard)
         
         hard_im_embeddings = clip_model.encode_image(rgbs_hard)
@@ -131,7 +131,7 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
     
     #REFACTOR put all these into a single method which works for hard or soft
     rgbs = renderer.render(volume=out_3d_soft).double()            
-    rgbs =  resizer(rgbs)
+    rgbs = resizer(rgbs)
         
     return text_features,rgbs
     
