@@ -109,7 +109,7 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
     decoder_embs = latent_flow_model.sample(batch_size, noise=noise, cond_inputs=text_features)
     
     out_3d = autoencoder.decoding(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size).to(args.device)
-    out_3d_soft = torch.sigmoid(args.beta*(out_3d-args.threshold))
+    out_3d_soft = torch.sigmoid(args.beta*(out_3d-args.threshold)).clone()
    
     if not iter%50:
         out_3d_hard = out_3d.detach() > args.threshold
@@ -145,7 +145,7 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
     rgbs = []
     for i in range(batch_size):
         if args.renderer=='ea':
-            out_3d_soft[i] =  rotation.rotate_random(out_3d_soft[i].float().unsqueeze(0).unsqueeze(0))
+            out_3d_soft[i] =  rotation.rotate_random(out_3d_soft[i].float().unsqueeze(0).unsqueeze(0)).clone()
             angles=[]
             for axis in range(3):
                 out_2d_i = renderer.render(volume=out_3d_soft[i].squeeze(),axis=axis).double()            

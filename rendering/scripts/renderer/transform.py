@@ -86,6 +86,6 @@ class Transform():
         # grid sample expects y- to be up and z- to be front
         indices_rotated[..., 1] = -indices_rotated[..., 1]
         indices_rotated[..., 2] = -indices_rotated[..., 2]
-        volume = torch.nn.functional.grid_sample(volume, indices_rotated, mode='bilinear')
+        volume = torch.nn.functional.grid_sample(volume.clone(), indices_rotated, mode='bilinear').clone()
 
         return volume
