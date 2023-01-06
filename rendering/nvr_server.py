@@ -19,7 +19,7 @@ BLENDER_SCALE = 2
 DIAMETER = 4.2  # The voxel area in world coordinates
 
 
-latest_checkpoint = '/tmp/checkpoint/model.ckpt-126650'
+latest_checkpoint = '/scratch/km3888/nvr_weights/checkpoints/model.ckpt-126650'
 tf.compat.v1.reset_default_graph()
 g = tf.compat.v1.Graph()
 with g.as_default():
@@ -66,7 +66,7 @@ def render_tf_forward(final_composite,interpolated_voxels):
     return predictions
 
 def render_tf_backward(final_composite,interpolated_voxels,upstream_gradient):
-    latest_checkpoint = '/tmp/checkpoint/model.ckpt-126650'
+    latest_checkpoint = '/scratch/km3888/nvr_weights/checkpoints/model.ckpt-126650'
     
     a = interpolated_voxels.cpu().numpy()
     b = final_composite.cpu().numpy()*2.-1
