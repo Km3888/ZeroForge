@@ -22,31 +22,32 @@ DIAMETER = 4.2  # The voxel area in world coordinates
 latest_checkpoint = '/scratch/km3888/nvr_weights/checkpoints/model.ckpt-126650'
 tf.compat.v1.reset_default_graph()
 g = tf.compat.v1.Graph()
-with g.as_default():
-    vol_placeholder = tf.compat.v1.placeholder(tf.float32,
-                                        shape=[None, VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE, 4],
-                                        name='input_voxels')
-    rerender_placeholder = tf.compat.v1.placeholder(tf.float32,
+with tf.device('/device:GPU:1'):
+    with g.as_default():
+        vol_placeholder = tf.compat.v1.placeholder(tf.float32,
+                                            shape=[None, VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE, 4],
+                                            name='input_voxels')
+        rerender_placeholder = tf.compat.v1.placeholder(tf.float32,
+                                                shape=[None, IMAGE_SIZE, IMAGE_SIZE, 3],
+                                                name='rerender')
+        light_placeholder = tf.compat.v1.placeholder(tf.float32,
+                                            shape=[None, 3],
+                                            name='input_light')
+        
+        upstream_grad = tf.compat.v1.placeholder(tf.float32,
                                             shape=[None, IMAGE_SIZE, IMAGE_SIZE, 3],
-                                            name='rerender')
-    light_placeholder = tf.compat.v1.placeholder(tf.float32,
-                                        shape=[None, 3],
-                                        name='input_light')
-    
-    upstream_grad = tf.compat.v1.placeholder(tf.float32,
-                                        shape=[None, IMAGE_SIZE, IMAGE_SIZE, 3],
-                                        name='upstream_grad')
-    
-    model = models.neural_voxel_renderer_plus(vol_placeholder,
-                                                rerender_placeholder,
-                                                light_placeholder)
-    predicted_image_logits, = model.outputs
-    
-    adjusted = tf.reduce_sum(predicted_image_logits*upstream_grad)
-    vol_gradients = tf.gradients(adjusted,vol_placeholder)
-    rerender_gradients = tf.gradients(adjusted,rerender_placeholder)
-    
-    saver = tf.compat.v1.train.Saver()
+                                            name='upstream_grad')
+        
+        model = models.neural_voxel_renderer_plus(vol_placeholder,
+                                                    rerender_placeholder,
+                                                    light_placeholder)
+        predicted_image_logits, = model.outputs
+        
+        adjusted = tf.reduce_sum(predicted_image_logits*upstream_grad)
+        vol_gradients = tf.gradients(adjusted,vol_placeholder)
+        rerender_gradients = tf.gradients(adjusted,rerender_placeholder)
+        
+        saver = tf.compat.v1.train.Saver()
     
 def render_tf_forward(final_composite,interpolated_voxels):
     # tf.compat.v1.reset_default_graph()
@@ -55,7 +56,8 @@ def render_tf_forward(final_composite,interpolated_voxels):
     b = final_composite.cpu().numpy()*2.-1 #TODO account for this
     c = np.stack(batch_size*[light_position.squeeze()])
     d = np.zeros((batch_size,256,256,3))
-    with tf.compat.v1.Session(graph=g) as sess:
+    with tf.compat.v1.Session(graph=g,config=tf.compat.v1.ConfigProto(log_device_placement=True)) as sess:
+        devices = sess.list_devices()
         saver.restore(sess, latest_checkpoint)
         feed_dict = {vol_placeholder: a,
                     rerender_placeholder: b,
