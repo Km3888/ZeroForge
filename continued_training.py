@@ -105,9 +105,6 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
         text_features = text_features.clone()
     #REFACTOR compute text_features outside this method
     
-    if len(query_array)==1:
-        batch_size = args.batch_size
-        text_features = text_features.expand(batch_size,-1)
     noise = torch.Tensor(batch_size, args.emb_dims).normal_().to(args.device)
     decoder_embs = latent_flow_model.sample(batch_size, noise=noise, cond_inputs=text_features)
     

@@ -10,7 +10,7 @@ class BaselineRenderer:
         
     def render(self,volume):
         outputs=[]
-        rotated = self.rotation.rotate_random(volume.unsqueeze(1)).squeeze()
+        rotated = self.rotation.rotate_random(volume.unsqueeze(1)).squeeze(1)
         for axis in range(1,4):
             output = self.renderer.render(rotated,axis)
             outputs.append(output)
