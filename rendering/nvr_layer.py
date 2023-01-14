@@ -56,7 +56,7 @@ def estimate_ground_image(object_voxels):
     ground_voxel_color = np.concatenate([ground_voxel_color, ground_occupancy],
                                         axis=-1)
 
-    print('ground_voxel_color:',ground_voxel_color.shape)
+    #print('ground_voxel_color:',ground_voxel_color.shape)
 
     scene_voxels = object_voxels*(1-ground_occupancy) + \
                     ground_voxel_color*ground_occupancy
@@ -73,7 +73,7 @@ def estimate_ground_image(object_voxels):
                                                 euler_angles_x,
                                                 euler_angles_y,
                                                 translation_vector)
-    print('interpolated:',interpolated_voxels.shape)
+    #print('interpolated:',interpolated_voxels.shape)
 
     color_input, alpha_input = tf.split(interpolated_voxels, [3, 1], axis=-1)
     voxel_img = visual_hull.render(color_input*alpha_input)

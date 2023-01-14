@@ -18,11 +18,12 @@ GROUND_COLOR = np.array((136., 162, 199))/255.
 BLENDER_SCALE = 2
 DIAMETER = 4.2  # The voxel area in world coordinates
 
+device = 'cuda:1'
 
 latest_checkpoint = '/scratch/km3888/nvr_weights/checkpoints/model.ckpt-126650'
 tf.compat.v1.reset_default_graph()
 g = tf.compat.v1.Graph()
-with tf.device('/device:GPU:1'):
+with tf.device('/device:GPU:0'):
     with g.as_default():
         vol_placeholder = tf.compat.v1.placeholder(tf.float32,
                                             shape=[None, VOXEL_SIZE, VOXEL_SIZE, VOXEL_SIZE, 4],
@@ -76,6 +77,7 @@ def render_tf_backward(final_composite,interpolated_voxels,upstream_gradient):
     d = upstream_gradient.cpu().numpy()
     with tf.compat.v1.Session(graph=g) as sess:
         saver.restore(sess, latest_checkpoint)
+        devices = sess.list_devices()
         feed_dict = {vol_placeholder: a,
                     rerender_placeholder: b,
                     light_placeholder: c,
@@ -93,19 +95,13 @@ class NVR(torch.autograd.Function):
         predictions = render_tf_forward(final_composite,interpolated_voxels)
         #gives nice output if you use matplotlib.pyplot
         torch_predictions= torch.from_numpy(predictions).float()
-        print('input sizes:')
-        print(final_composite.shape)
-        print(interpolated_voxels.shape)
         return torch_predictions
     
     @staticmethod
     def backward(ctx, grad_output):
         final_composite,interpolated_voxels = ctx.saved_tensors
         d_composite,d_interpolated = render_tf_backward(final_composite,interpolated_voxels,grad_output)
-        print('backward sizes:')
-        print(d_composite.shape)
-        print(d_interpolated.shape)
-        return torch.from_numpy(d_composite).to('cuda:0'),torch.from_numpy(d_interpolated).to('cuda:0')
+        return torch.from_numpy(d_composite).to(device),torch.from_numpy(d_interpolated).to(device)
 
 
 class NVR_Renderer:
@@ -120,13 +116,13 @@ class NVR_Renderer:
         final_composite = final_composite.permute(0,2,3,1)
         output=NVR.apply(final_composite,interpolated_voxels)
         permuted_output=output.permute(0,3,1,2)
-        return permuted_output
+        return permuted_output*0.5+0.5
 
 def test_nvr():
     path="airplane_128.npy"
     with open(path, 'rb') as f:
         voxel = np.load(f)
-    voxel = torch.from_numpy(voxel).float().to('cuda:0')
+    voxel = torch.from_numpy(voxel).float().to(device)
     voxel.requires_grad=True
     
     renderer = NVR_Renderer()
@@ -136,7 +132,7 @@ def test_nvr():
     path="airplane_128.npy"
     with open(path, 'rb') as f:
         new_voxel = np.load(f)
-    new_voxel = torch.from_numpy(new_voxel).float().to('cuda:0')
+    new_voxel = torch.from_numpy(new_voxel).float().to(device)
     new_voxel.requires_grad=True
     
     new_voxel = torch.stack([voxel,new_voxel],dim=0)
@@ -146,7 +142,7 @@ if __name__=="__main__":
     path="airplane_128.npy"
     with open(path, 'rb') as f:
         voxel = np.load(f)
-    voxel = torch.from_numpy(voxel).float().to('cuda:0')
+    voxel = torch.from_numpy(voxel).float().to(device)
     voxel.requires_grad=True
     
     renderer = NVR_Renderer()
@@ -156,7 +152,7 @@ if __name__=="__main__":
     path="airplane_128.npy"
     with open(path, 'rb') as f:
         new_voxel = np.load(f)
-    new_voxel = torch.from_numpy(new_voxel).float().to('cuda:0')
+    new_voxel = torch.from_numpy(new_voxel).float().to(device)
     new_voxel.requires_grad=True
     
     new_voxel = torch.stack([voxel,new_voxel],dim=0)

@@ -1,3 +1,4 @@
+slurm/*
 exps/*
 .ipynb_checkpoints/
 nohup.out

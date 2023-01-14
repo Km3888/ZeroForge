@@ -26,19 +26,25 @@ import torchvision.transforms as T
 from torch.utils.tensorboard import SummaryWriter
 
 import PIL
-
-
+import sys
+import numpy as np
 
 def clip_loss(args,query_array,clip_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features=None):
     # text_emb,ims = generate_single_query(args,clip_model,autoencoder,latent_flow_model,renderer,query,args.batch_size,rotation,resizer,iter)
     
     text_embs,ims = generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,renderer,query_array,resizer,iter,text_features=text_features)
-    im= im.to('cuda:0')
+    ims= ims.to(args.device)
     im_embs=clip_model.encode_image(ims)
     text_embs=text_embs.unsqueeze(1).expand(-1,3,-1).reshape(-1,512)
     losses=-1*torch.cosine_similarity(text_embs,im_embs)
     loss = losses.mean()
     
+    import numpy as np
+    if iter<50:
+        im_np = ims.cpu().detach().numpy()
+        with open('out_ims/out_ims_%s.npy' % iter,'wb') as f:
+            np.save(f,im_np)
+
     if args.use_tensorboard and not iter%10:
         im_samples= ims.view(-1,3,224,224)
         grid = torchvision.utils.make_grid(im_samples, nrow=3)
@@ -107,16 +113,16 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
     
     noise = torch.Tensor(batch_size, args.emb_dims).normal_().to(args.device)
     decoder_embs = latent_flow_model.sample(batch_size, noise=noise, cond_inputs=text_features)
-    
+
     out_3d = autoencoder.decoding(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size).to(args.device)
     out_3d_soft = torch.sigmoid(args.beta*(out_3d-args.threshold)).clone()
-   
+    
     if not iter%50:
         out_3d_hard = out_3d.detach() > args.threshold
         #Currently only doing all 3 angles for ea, could try something similar
         #for nvr+ once I understand the camera angle better
         #renderer expects [batch,voxel_size,voxel_size,voxel_size]    
-        rgbs_hard = renderer.render(out_3d_hard.float()).double().to('cuda:0')
+        rgbs_hard = renderer.render(out_3d_hard.float()).double().to(args.device)
         rgbs_hard = resizer(rgbs_hard)
         
         hard_im_embeddings = clip_model.encode_image(rgbs_hard)
@@ -130,7 +136,9 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
             writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
     
     #REFACTOR put all these into a single method which works for hard or soft
-    rgbs = renderer.render(out_3d_soft).double()            
+    rgbs_float = renderer.render(out_3d_soft).double()
+
+    rgbs = rgbs_float.double()
     rgbs = resizer(rgbs)
         
     return text_features,rgbs
@@ -150,7 +158,8 @@ def evaluate_true_voxel(out_3d,args,clip_model,text_features,i):
     
     voxel_ims = torch.cat(voxel_ims,0)
     grid = torchvision.utils.make_grid(voxel_ims, nrow=num_shapes)
-    
+        
+
     if args.use_tensorboard:
         writer.add_image('voxel image', grid, i)
     # #convert to 224x224 image with 3 channels
@@ -241,6 +250,9 @@ def main(args):
     
     latent_flow_network = latent_flows.get_generator(args.emb_dims, args.cond_emb_dim, device, flow_type=args.flow_type, num_blocks=args.num_blocks, num_hidden=args.num_hidden)
     if not args.uninitialized:
+        print(args.checkpoint_dir_prior)
+        print(args.checkpoint)
+        sys.stdout.flush()
         checkpoint_nf_path = os.path.join(args.checkpoint_dir_prior,  args.checkpoint_nf +".pt")
         checkpoint = torch.load(checkpoint_nf_path, map_location=args.device)
         latent_flow_network.load_state_dict(checkpoint['model'])
