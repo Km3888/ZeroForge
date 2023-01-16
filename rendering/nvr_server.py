@@ -57,7 +57,7 @@ def render_tf_forward(final_composite,interpolated_voxels):
     b = final_composite.cpu().numpy()*2.-1 #TODO account for this
     c = np.stack(batch_size*[light_position.squeeze()])
     d = np.zeros((batch_size,256,256,3))
-    with tf.compat.v1.Session(graph=g,config=tf.compat.v1.ConfigProto(log_device_placement=True)) as sess:
+    with tf.compat.v1.Session(graph=g,config=tf.compat.v1.ConfigProto(log_device_placement=False)) as sess:
         devices = sess.list_devices()
         saver.restore(sess, latest_checkpoint)
         feed_dict = {vol_placeholder: a,
@@ -71,9 +71,10 @@ def render_tf_forward(final_composite,interpolated_voxels):
 def render_tf_backward(final_composite,interpolated_voxels,upstream_gradient):
     latest_checkpoint = '/scratch/km3888/nvr_weights/checkpoints/model.ckpt-126650'
     
+    batch_size = interpolated_voxel.shape[0]
     a = interpolated_voxels.cpu().numpy()
     b = final_composite.cpu().numpy()*2.-1
-    c = light_position
+    c = np.stack(batch_size*[light_position.squeeze()])
     d = upstream_gradient.cpu().numpy()
     with tf.compat.v1.Session(graph=g) as sess:
         saver.restore(sess, latest_checkpoint)
@@ -111,7 +112,8 @@ class NVR_Renderer:
     
     def render(self,voxels,angle=139.):
         #TODO randomize light and camera angles
-        angle=np.expand_dims(angle,axis=(0)).astype(np.float32)
+        batch_size=voxels.shape[0]
+        angle=np.random.uniform(low=0.0,high=180.0,size=(batch_size,1)).astype(np.float32)
         final_composite,interpolated_voxels = diff_preprocess(voxels,angle)
         final_composite = final_composite.permute(0,2,3,1)
         output=NVR.apply(final_composite,interpolated_voxels)
