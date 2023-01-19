@@ -71,7 +71,7 @@ def render_tf_forward(final_composite,interpolated_voxels):
 def render_tf_backward(final_composite,interpolated_voxels,upstream_gradient):
     latest_checkpoint = '/scratch/km3888/nvr_weights/checkpoints/model.ckpt-126650'
     
-    batch_size = interpolated_voxel.shape[0]
+    batch_size = interpolated_voxels.shape[0]
     a = interpolated_voxels.cpu().numpy()
     b = final_composite.cpu().numpy()*2.-1
     c = np.stack(batch_size*[light_position.squeeze()])
