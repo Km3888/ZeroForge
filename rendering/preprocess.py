@@ -43,6 +43,8 @@ if True:
     GROUND_COLOR = np.array((136., 162, 199))/255.
     BLENDER_SCALE = 2
     DIAMETER = 4.2  # The voxel area in world coordinates
+    
+    device = 'cuda:1'
 
 def process_voxel(voxel):
     voxel = voxel.detach().cpu().numpy()
@@ -160,7 +162,7 @@ def diff_object_to_world(voxels,
     sampling_points = tf.cast(sampling_points, tf.float32)
 
     #okay now we care about differentiability so convert to PyTorch and put on GPU
-    sampling_points = torch.from_numpy(sampling_points.numpy()).to('cuda:0')
+    sampling_points = torch.from_numpy(sampling_points.numpy()).to(device)
 
     sampling_points = sampling_points.view(-1,128,128,128,3)
     sampling_points = sampling_points.expand(voxels.shape[0],-1,-1,-1,-1)
@@ -176,19 +178,19 @@ def diff_estimate_ground_image(object_voxels,angle):
         euler_angles_y,translation_vector = make_arrays(angle)
         
     #convert arrays to pytorch and put them on cuda:0
-    ground_occupancy = torch.from_numpy(ground_occupancy).to('cuda:0')
-    ground_voxel_color = torch.from_numpy(ground_voxel_color).to('cuda:0')
+    ground_occupancy = torch.from_numpy(ground_occupancy).to(device)
+    ground_voxel_color = torch.from_numpy(ground_voxel_color).to(device)
     scene_voxels = object_voxels*(1-ground_occupancy) + \
                     ground_voxel_color*ground_occupancy
     
     interpolated_voxels = diff_object_to_world(scene_voxels,
                                                 euler_angles_x,
                                                 euler_angles_y,
-                                                translation_vector)    
+                                                translation_vector)
     return interpolated_voxels
     
 def diff_load_voxel(voxel):
-    edited_voxel = torch.transpose(voxel,1,0)
+    edited_voxel = torch.transpose(voxel,2,1)
     edited_voxel = torch.flip(edited_voxel,[0])
     edited_voxel = edited_voxel.view(-1,128,128,128,1)
     
@@ -232,7 +234,7 @@ def diff_render_voxels_from_blender_camera(voxels,
     # Adjust the camera (translate the camera instead of the object)
     sampling_volume = sampling_volume - object_translation
     sampling_volume = sampling_volume/helpers.CUBE_BOX_DIM
-    sampling_tensor = torch.from_numpy(sampling_volume.numpy()).to('cuda:0')
+    sampling_tensor = torch.from_numpy(sampling_volume.numpy()).to(device)
     sampling_tensor = sampling_tensor.view(-1,128,128,128,3)
     
     interpolated_voxels = interpolated_voxels.permute(0,4,1,2,3)
@@ -287,7 +289,7 @@ def diff_transform_volume(voxels, transformation_matrix,voxel_size = (128,128,12
     volume_sampling = tf.cast(tf.linalg.matrix_transpose(volume_sampling),
                                 tf.float32)
     permuted_voxels = voxels.permute(0,4,1,2,3)
-    sampling_tensor = torch.tensor(volume_sampling.numpy(),dtype=torch.float32).to('cuda:0')
+    sampling_tensor = torch.tensor(volume_sampling.numpy(),dtype=torch.float32).to(device)
     sampling_tensor = sampling_tensor.view(-1,128,128,128,3)
     sampling_tensor = sampling_tensor.expand(voxels.shape[0],-1,-1,-1,-1)
 
@@ -305,8 +307,8 @@ def diff_preprocess(object_voxels,angle=139.):
                             camera_translation_vector[:, :, 0],
                             GROUND_COLOR)
     
-    ground_image = torch.tensor(ground_image.numpy(),dtype=torch.float32).to('cuda:0')
-    ground_alpha = torch.tensor(ground_alpha.numpy(),dtype=torch.float32).to('cuda:0')
+    ground_image = torch.tensor(ground_image.numpy(),dtype=torch.float32).to(device)
+    ground_alpha = torch.tensor(ground_alpha.numpy(),dtype=torch.float32).to(device)
     ground_image = ground_image.permute(0,3,1,2)
     ground_alpha = ground_alpha.permute(0,3,1,2)
     
@@ -367,12 +369,12 @@ if __name__=='__main__':
     path="airplane_128.npy"
     with open(path, 'rb') as f:
         voxel = np.load(f)
-    torch_voxel = torch.from_numpy(voxel).to('cuda:0').float()
+    torch_voxel = torch.from_numpy(voxel).to(device).float()
     torch_voxel.requires_grad=True
     
     if not args.differentiable:
         final_composite,interpolated_voxels = og_preprocess(torch_voxel)
-        final_composite = torch.tensor(final_composite.numpy(),dtype=torch.float32).to('cuda:0')
+        final_composite = torch.tensor(final_composite.numpy(),dtype=torch.float32).to(device)
     else:
         final_composite,interpolated_voxels = diff_preprocess(torch_voxel)
         final_composite = final_composite.permute(0,2,3,1)
