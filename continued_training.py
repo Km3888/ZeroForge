@@ -35,7 +35,8 @@ def clip_loss(args,query_array,clip_model,autoencoder,latent_flow_model,renderer
     text_embs,ims = generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,renderer,query_array,resizer,iter,text_features=text_features)
     ims= ims.to(args.device)
     im_embs=clip_model.encode_image(ims)
-    text_embs=text_embs.unsqueeze(1).expand(-1,3,-1).reshape(-1,512)
+    m = 3 if args.renderer=='ea' else 1
+    text_embs=text_embs.unsqueeze(1).expand(-1,m,-1).reshape(-1,512)
     losses=-1*torch.cosine_similarity(text_embs,im_embs)
     loss = losses.mean()
     
@@ -48,7 +49,7 @@ def clip_loss(args,query_array,clip_model,autoencoder,latent_flow_model,renderer
     if args.use_tensorboard and not iter%10:
         im_samples= ims.view(-1,3,224,224)
         grid = torchvision.utils.make_grid(im_samples, nrow=3)
-        writer.add_image('images', grid, iter)
+        args.writer.add_image('images', grid, iter)
 
     return loss
 
@@ -115,7 +116,7 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
     decoder_embs = latent_flow_model.sample(batch_size, noise=noise, cond_inputs=text_features)
 
     out_3d = autoencoder.decoding(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size).to(args.device)
-    out_3d_soft = torch.sigmoid(args.beta*(out_3d-args.threshold)).clone()
+    out_3d_soft = torch.sigmoid(args.beta*(out_3d-args.threshold))#.clone()
     
     if not iter%50:
         out_3d_hard = out_3d.detach() > args.threshold
@@ -127,13 +128,14 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
         
         hard_im_embeddings = clip_model.encode_image(rgbs_hard)
         
-        text_labels = text_features.unsqueeze(1).expand(-1,3,-1).reshape(-1,512)
+        m = 3 if args.renderer=='ea' else 1
+        text_labels = text_features.unsqueeze(1).expand(-1,m,-1).reshape(-1,512)
         hard_loss = -1*torch.cosine_similarity(text_labels,hard_im_embeddings).mean()
         #write to tensorboard
         voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard,args,clip_model,text_features,iter)
         if args.use_tensorboard:
-            writer.add_scalar('Loss/hard_loss', hard_loss, iter)
-            writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
+            args.writer.add_scalar('Loss/hard_loss', hard_loss, iter)
+            args.writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
     
     #REFACTOR put all these into a single method which works for hard or soft
     rgbs_float = renderer.render(out_3d_soft).double()
@@ -161,7 +163,7 @@ def evaluate_true_voxel(out_3d,args,clip_model,text_features,i):
         
 
     if args.use_tensorboard:
-        writer.add_image('voxel image', grid, i)
+        args.writer.add_image('voxel image', grid, i)
     # #convert to 224x224 image with 3 channels
     voxel_tensor = T.Resize((224,224))(voxel_ims)
     # get CLIP embedding
@@ -194,6 +196,7 @@ def get_local_parser(mode="args"):
     parser.add_argument("--num_voxels",  type=int, default=32, help='number of voxels')
     # parser.add_argument("--threshold",  type=float, default=0.5, help='threshold for voxelization')
     parser.add_argument("--renderer",  type=str, default='ea')
+    parser.add_argument("--setting", type=int, default=None)
     if mode == "args":
         args = parser.parse_args()
         return args
@@ -229,7 +232,7 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         losses.append(loss.item())
         
         if args.use_tensorboard:
-            writer.add_scalar('Loss/train', loss.item(), iter)
+            args.writer.add_scalar('Loss/train', loss.item(), iter)
         
         flow_optimizer.step()
         net_optimizer.step()
@@ -237,6 +240,10 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     print(losses)
             
 def main(args):
+    if args.use_tensorboard:
+        args.writer=SummaryWriter(comment='_%s_lr=%s_beta=%s_gpu=%s_baseline=%s_v=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized,args.num_voxels))
+    assert args.renderer in ['ea','nvr+']
+
     device, gpu_array = helper.get_device(args)
     args.device = device
     
@@ -277,7 +284,6 @@ query_arrays = {
 
 if __name__=="__main__":
     args=get_local_parser()
-    if args.use_tensorboard:
-        writer=SummaryWriter(comment='_%s_lr=%s_beta=%s_gpu=%s_baseline=%s_v=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized,args.num_voxels))
-    assert args.renderer in ['ea','nvr+']
+    print('renderer %s' % args.renderer)
+    import sys; sys.stdout.flush()
     main(args)
