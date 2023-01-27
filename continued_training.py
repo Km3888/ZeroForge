@@ -16,7 +16,7 @@ from utils import helper
 from utils import visualization
 from utils import experimenter
 
-from rendering.nvr_server import NVR_Renderer
+from rendering.nvr_renderer import NVR_Renderer
 from rendering.baseline_renderer import BaselineRenderer
 
 import torchvision
