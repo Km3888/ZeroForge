@@ -39,12 +39,6 @@ def clip_loss(args,query_array,clip_model,autoencoder,latent_flow_model,renderer
     text_embs=text_embs.unsqueeze(1).expand(-1,m,-1).reshape(-1,512)
     losses=-1*torch.cosine_similarity(text_embs,im_embs)
     loss = losses.mean()
-    
-    import numpy as np
-    if iter<50:
-        im_np = ims.cpu().detach().numpy()
-        with open('out_ims/out_ims_%s.npy' % iter,'wb') as f:
-            np.save(f,im_np)
 
     if args.use_tensorboard and not iter%10:
         im_samples= ims.view(-1,3,224,224)
@@ -118,7 +112,7 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
     out_3d = autoencoder.decoding(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size).to(args.device)
     out_3d_soft = torch.sigmoid(args.beta*(out_3d-args.threshold))#.clone()
     
-    if not iter%50:
+    if False:
         out_3d_hard = out_3d.detach() > args.threshold
         #Currently only doing all 3 angles for ea, could try something similar
         #for nvr+ once I understand the camera angle better
@@ -269,6 +263,7 @@ def main(args):
         renderer=BaselineRenderer('absorption_only',param_dict)
     elif args.renderer == 'nvr+':
         renderer = NVR_Renderer()
+        renderer.model.to(args.device)
     test_train(args,clip_model,net,latent_flow_network,renderer)
     
 query_arrays = {

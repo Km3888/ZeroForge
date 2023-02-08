@@ -44,7 +44,7 @@ if True:
     BLENDER_SCALE = 2
     DIAMETER = 4.2  # The voxel area in world coordinates
     
-    device = 'cuda:1'
+    device = 'cuda:0'
 
 def process_voxel(voxel):
     voxel = voxel.detach().cpu().numpy()

@@ -1,8 +1,8 @@
 import torch
 import torch.nn as nn
 
-from torch_helpers import load_params
-from torch_blocks import ConvBlock3d, ConvBlock2d, ResBlock3d, ResBlock2d, \
+from rendering.nvr_torch.torch_helpers import load_params
+from rendering.nvr_torch.torch_blocks import ConvBlock3d, ConvBlock2d, ResBlock3d, ResBlock2d, \
                         ConvTransposeBlock2d, UNet
 
 class VoxelProcessing(nn.Module):
@@ -24,10 +24,9 @@ class VoxelProcessing(nn.Module):
         
         self.resblocks = [self.vol_a1, self.vol_a2, self.vol_a3, self.vol_a4, self.vol_a5]
         
-        self.vol_encoder = nn.Conv2d(32, nf_2d, 1, 1, 0)
+        self.vol_encoder = nn.Conv2d(32*32, nf_2d, 1, 1, 0)
         self.final_relu = nn.LeakyReLU(negative_slope=0.3)
         
-        self.parameterize()
         
     def forward(self, voxels):
         voxels = self.vol0_a(voxels)
@@ -81,7 +80,6 @@ class ProjectionProcessing(nn.Module):
         self.e5 = ResBlock2d(512,512)
         
         self.e_blocks = [self.e1,self.e2,self.e3,self.e4,self.e5]
-        self.parameterize()
         
     def forward(self,x):
         shortcut = x
@@ -108,8 +106,6 @@ class LightProcessing(nn.Module):
         super(LightProcessing, self).__init__()
         self.fc1 = nn.Linear(3,64)
         self.fc2 = nn.Linear(64,64)
-
-        self.parameterize()
         
     def forward(self,light):
         fc_light = self.fc1(light)
@@ -142,8 +138,6 @@ class Merger(nn.Module):
         self.res5 = ResBlock2d(512,512)
 
         self.res_blocks = [self.res1,self.res2,self.res3,self.res4,self.res5]
-
-        self.parameterize()
 
     def forward(self,proj_representation,light_code):
         latent_code = torch.cat((proj_representation,light_code),dim=1)
@@ -183,8 +177,6 @@ class Decoder(nn.Module):
         
         self.tranpose_blocks = [self.conv_t1,self.conv_t2,self.conv_t3]
         self.conv_blocks = [self.conv_1,self.conv_2,self.conv_3]
-        
-        self.parameterize()
         
     def forward(self,z):
         z = self.conv_t1(z)
@@ -228,8 +220,6 @@ class ImageProcessing(nn.Module):
         
         self.conv_blocks = [self.conv_1,self.conv_2]
         
-        self.parameterize()
-        
     def forward(self,x):
         x = self.conv_1(x)
         x = self.conv_2(x)
@@ -249,8 +239,6 @@ class ReRendering(nn.Module):
         self.u_net = UNet(32,32)
         self.conv_block = ConvBlock2d(32,32,4,1)
         self.conv_layer = nn.Conv2d(32,3,4,1,padding=1)
-        
-        self.parameterize()
     
     def forward(self,rendering,composite):
         x = rendering + composite
