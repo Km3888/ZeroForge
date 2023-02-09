@@ -3,9 +3,9 @@ import torch.nn as nn
 import numpy as np
 import math
 
-from torch_helpers import load_params,to_txt
-from torch_modules import VoxelProcessing,ProjectionProcessing,LightProcessing,\
-                            Merger,Decoder,ImageProcessing, ReRendering
+from rendering.nvr_torch.torch_helpers import load_params,to_txt
+from rendering.nvr_torch.torch_modules import VoxelProcessing,ProjectionProcessing,\
+					LightProcessing,Merger,Decoder,ImageProcessing, ReRendering
 
 class NVR_Plus(nn.Module):
     
@@ -20,14 +20,20 @@ class NVR_Plus(nn.Module):
         self.rerenderer = ReRendering()
         
     def forward(self,voxels,final_composite,light_position):
+        assert not self.training
+        assert final_composite.max() <= 1.0
+        assert final_composite.min() >= -1.0
+
         voxel_representation = self.voxel_processing(voxels)
         projection_representation = self.projection_processing(voxel_representation)
         light_code = self.light_processing(light_position)
+
         latent_code = self.merger(projection_representation,light_code)
         rendered_image = self.decoder(latent_code)
         composite = self.image_processing(final_composite)
+
         prediction = self.rerenderer(rendered_image,composite)
-        prediction_image = prediction * 0.5 +0.5
+        prediction_image = prediction
         return prediction_image
     
 def run_forward():
