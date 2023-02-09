@@ -40,12 +40,6 @@ def clip_loss(args,query_array,clip_model,autoencoder,latent_flow_model,renderer
     losses=-1*torch.cosine_similarity(text_embs,im_embs)
     loss = losses.mean()
     
-    import numpy as np
-    if iter<50:
-        im_np = ims.cpu().detach().numpy()
-        with open('out_ims/out_ims_%s.npy' % iter,'wb') as f:
-            np.save(f,im_np)
-
     if args.use_tensorboard and not iter%10:
         im_samples= ims.view(-1,3,224,224)
         grid = torchvision.utils.make_grid(im_samples, nrow=3)
@@ -117,26 +111,7 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
 
     out_3d = autoencoder.decoding(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size).to(args.device)
     out_3d_soft = torch.sigmoid(args.beta*(out_3d-args.threshold))#.clone()
-    
-    if not iter%50:
-        out_3d_hard = out_3d.detach() > args.threshold
-        #Currently only doing all 3 angles for ea, could try something similar
-        #for nvr+ once I understand the camera angle better
-        #renderer expects [batch,voxel_size,voxel_size,voxel_size]    
-        rgbs_hard = renderer.render(out_3d_hard.float()).double().to(args.device)
-        rgbs_hard = resizer(rgbs_hard)
         
-        hard_im_embeddings = clip_model.encode_image(rgbs_hard)
-        
-        m = 3 if args.renderer=='ea' else 1
-        text_labels = text_features.unsqueeze(1).expand(-1,m,-1).reshape(-1,512)
-        hard_loss = -1*torch.cosine_similarity(text_labels,hard_im_embeddings).mean()
-        #write to tensorboard
-        voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard,args,clip_model,text_features,iter)
-        if args.use_tensorboard:
-            args.writer.add_scalar('Loss/hard_loss', hard_loss, iter)
-            args.writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
-    
     #REFACTOR put all these into a single method which works for hard or soft
     rgbs_float = renderer.render(out_3d_soft).double()
 
@@ -144,7 +119,47 @@ def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,rende
     rgbs = resizer(rgbs)
         
     return text_features,rgbs
+
+def do_eval(renderer,query_array,args,clip_model,autoencoder,latent_flow_model,resizer,iter,text_features=None):
+    clip_model.eval()
+    autoencoder.train()
+    latent_flow_model.eval() # has to be in .eval() mode for the sampling to work (which is bad but whatever)
     
+    voxel_size = args.num_voxels
+    batch_size = len(query_array)
+        
+    shape = (voxel_size, voxel_size, voxel_size)
+    p = visualization.make_3d_grid([-0.5] * 3, [+0.5] * 3, shape).type(torch.FloatTensor).to(args.device)
+    query_points = p.expand(batch_size, *p.size())
+    
+     # get the text embedding for each query
+    if text_features is None:
+        text_features = get_text_embeddings(args,clip_model,query_array)
+        text_features = text_features.clone()
+    #REFACTOR compute text_features outside this method
+    
+    noise = torch.Tensor(batch_size, args.emb_dims).normal_().to(args.device)
+    decoder_embs = latent_flow_model.sample(batch_size, noise=noise, cond_inputs=text_features)
+
+    out_3d = autoencoder.decoding(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size).to(args.device)
+    
+    out_3d_hard = out_3d.detach() > args.threshold
+    #Currently only doing all 3 angles for ea, could try something similar
+    #for nvr+ once I understand the camera angle better
+    #renderer expects [batch,voxel_size,voxel_size,voxel_size]    
+    rgbs_hard = renderer.render(out_3d_hard.float()).double().to(args.device)
+    rgbs_hard = resizer(rgbs_hard)
+    
+    hard_im_embeddings = clip_model.encode_image(rgbs_hard)
+    
+    m = 3 if args.renderer=='ea' else 1
+    text_labels = text_features.unsqueeze(1).expand(-1,m,-1).reshape(-1,512)
+    hard_loss = -1*torch.cosine_similarity(text_labels,hard_im_embeddings).mean()
+    #write to tensorboard
+    voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard,args,clip_model,text_features,iter)
+    if args.use_tensorboard:
+        args.writer.add_scalar('Loss/hard_loss', hard_loss, iter)
+        args.writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
 
 def evaluate_true_voxel(out_3d,args,clip_model,text_features,i):
     # code for saving the "true" voxel image, not useful right now
@@ -222,6 +237,10 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         os.makedirs('queries/%s' % args.query_array)
 
     for iter in range(20000):
+        if not iter%50:
+            do_eval(renderer,query_array,args,clip_model,autoencoder,latent_flow_model,resizer,iter,text_features)
+            
+
         flow_optimizer.zero_grad()
         net_optimizer.zero_grad()
         
