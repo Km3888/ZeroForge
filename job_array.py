@@ -5,10 +5,10 @@ from continued_training import get_local_parser,main
 setting_names= ['beta','learning_rate','num_views','renderer','query_array']
 
 settings = [[150],
-            [01e-6,01e-05,01e-06,01e-07],
-            [2],
+            [01e-05],
+            [1,4,6],
             ['nvr+'],
-            ['airplane','fork']\
+            ['fork','spoon']]
 
 
 num_settings = 1
@@ -36,6 +36,7 @@ def get_setting(setting_number, total, settings, setting_names):
 _,params = get_setting(args.setting,num_settings,settings,setting_names)
 
 for k,v in params.items():
+    print(k,v)
     setattr(args,k,v)
 
 main(args)

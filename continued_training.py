@@ -1,4 +1,5 @@
 import os
+os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:512"
 import os.path as osp
 import logging
 
@@ -114,6 +115,9 @@ def gen_shapes(query_array,args,clip_model,autoencoder,latent_flow_model,text_fe
 
 def do_eval(renderer,query_array,args,clip_model,autoencoder,latent_flow_model,resizer,iter,text_features=None):
     out_3d = gen_shapes(query_array,args,clip_model,autoencoder,latent_flow_model,text_features)
+    #save out_3d to numpy file
+    with open(f'out_3d/{args.learning_rate}_{args.query_array}/out_3d_{iter}.npy', 'wb') as f:
+        np.save(f, out_3d.cpu().detach().numpy())
     
     out_3d_hard = out_3d.detach() > args.threshold
     rgbs_hard = renderer.render(out_3d_hard.float()).double().to(args.device)
@@ -207,7 +211,7 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         os.makedirs('queries/%s' % args.query_array)
 
     for iter in range(20000):
-        if not iter%50:
+        if not iter%100:
             do_eval(renderer,query_array,args,clip_model,autoencoder,latent_flow_model,resizer,iter,text_features)
             
 
@@ -232,6 +236,8 @@ def main(args):
     if args.use_tensorboard:
         args.writer=SummaryWriter(comment='_%s_lr=%s_beta=%s_gpu=%s_baseline=%s_v=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized,args.num_voxels))
     assert args.renderer in ['ea','nvr+']
+    
+    os.mkdir('out_3d/{args.learning_rate}_{args.query_array}')
 
     device, gpu_array = helper.get_device(args)
     args.device = device
