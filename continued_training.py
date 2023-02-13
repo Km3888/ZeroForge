@@ -29,15 +29,20 @@ import PIL
 import sys
 import numpy as np
 
-def clip_loss(args,query_array,clip_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features=None):
+def clip_loss(args,query_array,clip_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features):
     # text_emb,ims = generate_single_query(args,clip_model,autoencoder,latent_flow_model,renderer,query,args.batch_size,rotation,resizer,iter)
+    out_3d = gen_shapes(query_array,args,clip_model,autoencoder,latent_flow_model,text_features)
+    out_3d_soft = torch.sigmoid(args.beta*(out_3d-args.threshold))#.clone()
     
-    text_embs,ims = generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,renderer,query_array,resizer,iter,text_features=text_features)
-    ims= ims.to(args.device)
+    #REFACTOR put all these into a single method which works for hard or soft
+    ims = renderer.render(out_3d_soft).double()
+    ims = resizer(ims)
+
     im_embs=clip_model.encode_image(ims)
     m = 3 if args.renderer=='ea' else 1
-    text_embs=text_embs.unsqueeze(1).expand(-1,m,-1).reshape(-1,512)
-    losses=-1*torch.cosine_similarity(text_embs,im_embs)
+    text_features=text_features.unsqueeze(1).expand(-1,m,-1).reshape(-1,512)
+
+    losses=-1*torch.cosine_similarity(text_features,im_embs)
     loss = losses.mean()
 
     if args.use_tensorboard and not iter%10:
@@ -89,38 +94,16 @@ def get_text_embeddings(args,clip_model,query_array):
     return text_features
 
 def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,renderer,query_array,resizer,iter,text_features=None):
-    clip_model.eval()
-    autoencoder.train()
-    latent_flow_model.eval() # has to be in .eval() mode for the sampling to work (which is bad but whatever)
-    
-    voxel_size = args.num_voxels
-    batch_size = len(query_array)
-        
-    shape = (voxel_size, voxel_size, voxel_size)
-    p = visualization.make_3d_grid([-0.5] * 3, [+0.5] * 3, shape).type(torch.FloatTensor).to(args.device)
-    query_points = p.expand(batch_size, *p.size())
-    
-     # get the text embedding for each query
-    if text_features is None:
-        text_features = get_text_embeddings(args,clip_model,query_array)
-        text_features = text_features.clone()
-    #REFACTOR compute text_features outside this method
-    
-    noise = torch.Tensor(batch_size, args.emb_dims).normal_().to(args.device)
-    decoder_embs = latent_flow_model.sample(batch_size, noise=noise, cond_inputs=text_features)
-
-    out_3d = autoencoder.decoding(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size).to(args.device)
+    out_3d = gen_shapes(query_array,args,clip_model,autoencoder,latent_flow_model,text_features)
     out_3d_soft = torch.sigmoid(args.beta*(out_3d-args.threshold))#.clone()
     
     #REFACTOR put all these into a single method which works for hard or soft
-    rgbs_float = renderer.render(out_3d_soft).double()
-
-    rgbs = rgbs_float.double()
+    rgbs = renderer.render(out_3d_soft).double()
     rgbs = resizer(rgbs)
         
     return text_features,rgbs
 
-def do_eval(renderer,query_array,args,clip_model,autoencoder,latent_flow_model,resizer,iter,text_features=None):
+def gen_shapes(query_array,args,clip_model,autoencoder,latent_flow_model,text_features):
     clip_model.eval()
     autoencoder.train()
     latent_flow_model.eval() # has to be in .eval() mode for the sampling to work (which is bad but whatever)
@@ -131,17 +114,15 @@ def do_eval(renderer,query_array,args,clip_model,autoencoder,latent_flow_model,r
     shape = (voxel_size, voxel_size, voxel_size)
     p = visualization.make_3d_grid([-0.5] * 3, [+0.5] * 3, shape).type(torch.FloatTensor).to(args.device)
     query_points = p.expand(batch_size, *p.size())
-    
-     # get the text embedding for each query
-    if text_features is None:
-        text_features = get_text_embeddings(args,clip_model,query_array)
-        text_features = text_features.clone()
-    #REFACTOR compute text_features outside this method
-    
+        
     noise = torch.Tensor(batch_size, args.emb_dims).normal_().to(args.device)
     decoder_embs = latent_flow_model.sample(batch_size, noise=noise, cond_inputs=text_features)
 
     out_3d = autoencoder.decoding(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size).to(args.device)
+    return out_3d
+
+def do_eval(renderer,query_array,args,clip_model,autoencoder,latent_flow_model,resizer,iter,text_features=None):
+    out_3d = gen_shapes(query_array,args,clip_model,autoencoder,latent_flow_model,text_features)
     
     out_3d_hard = out_3d.detach() > args.threshold
     #Currently only doing all 3 angles for ea, could try something similar
