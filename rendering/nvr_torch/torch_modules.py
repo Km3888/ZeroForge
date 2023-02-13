@@ -51,24 +51,6 @@ class VoxelProcessing(nn.Module):
         voxels = self.final_relu(voxels)
         return voxels
     
-    def parameterize(self):
-        params = load_params()
-        params_dict = {k:v for k,v in params}
-        i=0
-        for conv in self.conv3ds:
-            if i==0:
-                conv.parameterize(params_dict,'')
-            else:
-                conv.parameterize(params_dict,'_%s' % i)
-            i+=1
-            
-        for res in self.resblocks:
-            res.parameterize(params_dict,i)
-            i+=2
-            
-        self.vol_encoder.weight = torch.nn.parameter.Parameter(torch.from_numpy(params_dict['Network/VoxelProcessing/conv2d/kernel']).permute(3,2,0,1))
-        self.vol_encoder.bias = torch.nn.parameter.Parameter(torch.from_numpy(params_dict['Network/VoxelProcessing/conv2d/bias']))
-
 class ProjectionProcessing(nn.Module):
     
     def __init__(self):
@@ -93,13 +75,6 @@ class ProjectionProcessing(nn.Module):
         x = x + shortcut
         return x
         
-    def parameterize(self):
-        params = load_params()
-        params_dict = {k:v for k,v in params}
-        
-        for i,e_i in enumerate(self.e_blocks):
-            e_i.parameterize(params_dict,'Network/ProjectionProcessing',2*i,2*i+15)
-
 class LightProcessing(nn.Module):
     
     def __init__(self):
@@ -115,16 +90,6 @@ class LightProcessing(nn.Module):
         light_code = light_code.permute((0,3,1,2))
         return light_code
     
-    def parameterize(self):
-        params = load_params()
-        params_dict = {k:v for k,v in params}
-        
-        self.fc1.weight = torch.nn.parameter.Parameter(torch.from_numpy(params_dict['Network/LightProcessing/dense/kernel']).permute(1,0))
-        self.fc1.bias = torch.nn.parameter.Parameter(torch.from_numpy(params_dict['Network/LightProcessing/dense/bias']))
-        
-        self.fc2.weight = torch.nn.parameter.Parameter(torch.from_numpy(params_dict['Network/LightProcessing/dense_1/kernel']).permute(1,0))
-        self.fc2.bias = torch.nn.parameter.Parameter(torch.from_numpy(params_dict['Network/LightProcessing/dense_1/bias']))
-
 class Merger(nn.Module):
 
     def __init__(self):
@@ -151,15 +116,6 @@ class Merger(nn.Module):
         latent_code = latent_code + shortcut
 
         return latent_code
-
-    def parameterize(self):
-        params = load_params()
-        params_dict = {k:v for k,v in params}
-        module = 'Network/Merger'
-
-        self.conv1.parameterize(params_dict,module,11,25)
-        for i,res_i in enumerate(self.res_blocks):
-            res_i.parameterize(params_dict,module,11+2*i,26+2*i)
 
 class Decoder(nn.Module):
     
@@ -193,23 +149,6 @@ class Decoder(nn.Module):
         
         return z
     
-    def parameterize(self):
-        params = load_params()
-        params_dict = {k:v for k,v in params}
-        
-        for i,block_i in enumerate(self.tranpose_blocks):
-            if i==0:
-                block_i.parameterize(params_dict,'',36)
-            else:
-                block_i.parameterize(params_dict,'_%s'%i,36+i*2)
-                
-        for i, block_i in enumerate(self.conv_blocks):
-            block_i.parameterize(params_dict,'Network/Decoder',22+i,37+i*2)
-            
-        conv_weight = nn.Parameter(torch.from_numpy(params_dict['Network/Decoder/conv2d_25/kernel']).permute(3,2,0,1))
-        assert conv_weight.shape == self.final_conv.weight.shape
-        self.final_conv.weight = conv_weight
-
 class ImageProcessing(nn.Module):
     
     def __init__(self):
@@ -224,13 +163,6 @@ class ImageProcessing(nn.Module):
         x = self.conv_1(x)
         x = self.conv_2(x)
         return x
-    
-    def parameterize(self):
-        params = load_params()
-        params_dict = {k:v for k,v in params}
-        
-        for i,conv in enumerate(self.conv_blocks):
-            conv.parameterize(params_dict,'Network/ImageProcessingNetwork',26+i,42+i)
 
 class ReRendering(nn.Module):
     
@@ -248,11 +180,3 @@ class ReRendering(nn.Module):
         x = self.conv_layer(x)
         return x
     
-    def parameterize(self):
-        params = load_params()
-        params_dict = {k:v for k,v in params}
-        
-        self.u_net.parameterize(params_dict,27,44)
-        self.conv_block.parameterize(params_dict,'Network/NeuralRerenderingNetwork',49,59)
-        
-        self.conv_layer.weight = nn.Parameter(torch.from_numpy(params_dict['Network/NeuralRerenderingNetwork/conv2d_50/kernel']).permute(3,2,0,1))
