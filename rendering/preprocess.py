@@ -267,11 +267,13 @@ def ea_render(voxel,absorption_factor,cell_size,axis=2):
     
     return image
 
-def diff_object_rotation_in_blender_world(voxels,object_rotation):
+def diff_object_rotation_in_blender_world(voxels,rotation_angles):
     """Rotate the voxels as in blender world."""
     euler_angles = np.array([0, 0, 1], dtype=np.float32)*np.deg2rad(90)
     object_correction_matrix = rotation_matrix_3d.from_euler(euler_angles)
-    euler_angles = np.array([0, 1, 0], dtype=np.float32)*(-object_rotation)
+    
+    euler_angles = np.expand_dims(rotation_angles, axis=0)
+    # euler_angles = np.array([0, 1, 0], dtype=np.float32)*(-object_rotation)
     object_rotation_matrix = rotation_matrix_3d.from_euler(euler_angles)
     euler_angles_blender = np.array([1, 0, 0], dtype=np.float32)*np.deg2rad(-90)
     blender_object_correction_matrix = \
@@ -297,9 +299,9 @@ def diff_transform_volume(voxels, transformation_matrix,voxel_size = (128,128,12
     output = output.permute(0,2,3,4,1)
     return output
 
-def diff_preprocess(object_voxels,angle=139.):
+def diff_preprocess(object_voxels,rotation_angles):
     object_voxels = diff_load_voxel(object_voxels)
-    interpolated_voxels = diff_estimate_ground_image(object_voxels,angle)
+    interpolated_voxels = diff_estimate_ground_image(object_voxels,rotation_angles)
 
     ground_image, ground_alpha = \
         helpers.generate_ground_image(IMAGE_SIZE, IMAGE_SIZE, focal, principal_point,
@@ -313,8 +315,6 @@ def diff_preprocess(object_voxels,angle=139.):
     ground_alpha = ground_alpha.permute(0,3,1,2)
     
     
-    object_rotation_dvr = np.array(np.deg2rad(angle),
-                            dtype=np.float32)
     object_translation_dvr = np.array(object_translation[..., [0, 2, 1]], 
                                     dtype=np.float32)
     object_translation_dvr -= np.array([0, 0, helpers.OBJECT_BOTTOM],
@@ -322,7 +322,7 @@ def diff_preprocess(object_voxels,angle=139.):
     
     rerendering = \
     diff_render_voxels_from_blender_camera(object_voxels,
-                                        object_rotation_dvr,
+                                        rotation_angles,
                                         object_translation_dvr,
                                         256, 
                                         256,
