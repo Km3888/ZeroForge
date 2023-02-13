@@ -39,8 +39,9 @@ def clip_loss(args,query_array,clip_model,autoencoder,latent_flow_model,renderer
     ims = resizer(ims)
 
     im_embs=clip_model.encode_image(ims)
-    m = 3 if args.renderer=='ea' else 1
-    text_features=text_features.unsqueeze(1).expand(-1,m,-1).reshape(-1,512)
+    if args.renderer=='ea':
+        #baseline renderer gives 3 dimensions
+        text_features=text_features.unsqueeze(1).expand(-1,3,-1).reshape(-1,512)
 
     losses=-1*torch.cosine_similarity(text_features,im_embs)
     loss = losses.mean()
@@ -93,16 +94,6 @@ def get_text_embeddings(args,clip_model,query_array):
 
     return text_features
 
-def generate_for_query_array(args,clip_model,autoencoder,latent_flow_model,renderer,query_array,resizer,iter,text_features=None):
-    out_3d = gen_shapes(query_array,args,clip_model,autoencoder,latent_flow_model,text_features)
-    out_3d_soft = torch.sigmoid(args.beta*(out_3d-args.threshold))#.clone()
-    
-    #REFACTOR put all these into a single method which works for hard or soft
-    rgbs = renderer.render(out_3d_soft).double()
-    rgbs = resizer(rgbs)
-        
-    return text_features,rgbs
-
 def gen_shapes(query_array,args,clip_model,autoencoder,latent_flow_model,text_features):
     clip_model.eval()
     autoencoder.train()
@@ -133,9 +124,10 @@ def do_eval(renderer,query_array,args,clip_model,autoencoder,latent_flow_model,r
     
     hard_im_embeddings = clip_model.encode_image(rgbs_hard)
     
-    m = 3 if args.renderer=='ea' else 1
-    text_labels = text_features.unsqueeze(1).expand(-1,m,-1).reshape(-1,512)
-    hard_loss = -1*torch.cosine_similarity(text_labels,hard_im_embeddings).mean()
+    if args.renderer=='ea':
+        #baseline renderer gives 3 dimensions
+        text_features=text_features.unsqueeze(1).expand(-1,3,-1).reshape(-1,512)
+    hard_loss = -1*torch.cosine_similarity(text_features,hard_im_embeddings).mean()
     #write to tensorboard
     voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard,args,clip_model,text_features,iter)
     if args.use_tensorboard:
