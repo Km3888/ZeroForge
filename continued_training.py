@@ -46,7 +46,7 @@ def clip_loss(args,query_array,clip_model,autoencoder,latent_flow_model,renderer
     losses=-1*torch.cosine_similarity(text_features,im_embs)
     loss = losses.mean()
 
-    if args.use_tensorboard and not iter%10:
+    if args.use_tensorboard and not iter%50:
         im_samples= ims.view(-1,3,224,224)
         grid = torchvision.utils.make_grid(im_samples, nrow=3)
         args.writer.add_image('images', grid, iter)
@@ -116,9 +116,6 @@ def do_eval(renderer,query_array,args,clip_model,autoencoder,latent_flow_model,r
     out_3d = gen_shapes(query_array,args,clip_model,autoencoder,latent_flow_model,text_features)
     
     out_3d_hard = out_3d.detach() > args.threshold
-    #Currently only doing all 3 angles for ea, could try something similar
-    #for nvr+ once I understand the camera angle better
-    #renderer expects [batch,voxel_size,voxel_size,voxel_size]    
     rgbs_hard = renderer.render(out_3d_hard.float()).double().to(args.device)
     rgbs_hard = resizer(rgbs_hard)
     
@@ -135,7 +132,7 @@ def do_eval(renderer,query_array,args,clip_model,autoencoder,latent_flow_model,r
         args.writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
 
 def evaluate_true_voxel(out_3d,args,clip_model,text_features,i):
-    # code for saving the "true" voxel image, not useful right now
+    # code for saving the "true" voxel image
     out_3d_hard = out_3d>args.threshold
     voxel_ims=[]
     num_shapes = out_3d_hard.shape[0]
