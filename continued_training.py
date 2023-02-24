@@ -114,8 +114,7 @@ def gen_shapes(query_array,args,clip_model,autoencoder,latent_flow_model,text_fe
     return out_3d
 
 def do_eval(renderer,query_array,args,clip_model,autoencoder,latent_flow_model,resizer,iter,text_features=None):
-    with torch.no_grad():
-        out_3d = gen_shapes(query_array,args,clip_model,autoencoder,latent_flow_model,text_features)
+    out_3d = gen_shapes(query_array,args,clip_model,autoencoder,latent_flow_model,text_features)
     #save out_3d to numpy file
     with open(f'out_3d/{args.learning_rate}_{args.query_array}/out_3d_{iter}.npy', 'wb') as f:
         np.save(f, out_3d.cpu().detach().numpy())
