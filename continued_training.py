@@ -116,8 +116,8 @@ def gen_shapes(query_array,args,clip_model,autoencoder,latent_flow_model,text_fe
 def do_eval(renderer,query_array,args,clip_model,autoencoder,latent_flow_model,resizer,iter,text_features=None):
     out_3d = gen_shapes(query_array,args,clip_model,autoencoder,latent_flow_model,text_features)
     #save out_3d to numpy file
-    with open(f'out_3d/{args.learning_rate}_{args.query_array}/out_3d_{iter}.npy', 'wb') as f:
-        np.save(f, out_3d.cpu().detach().numpy())
+    # with open(f'out_3d/{args.learning_rate}_{args.query_array}/out_3d_{iter}.npy', 'wb') as f:
+    #     np.save(f, out_3d.cpu().detach().numpy())
     
     out_3d_hard = out_3d.detach() > args.threshold
     rgbs_hard = renderer.render(out_3d_hard.float()).double().to(args.device)
@@ -237,7 +237,8 @@ def main(args):
         args.writer=SummaryWriter(comment='_%s_lr=%s_beta=%s_gpu=%s_baseline=%s_v=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized,args.num_voxels))
     assert args.renderer in ['ea','nvr+']
     
-    os.mkdir('out_3d/{args.learning_rate}_{args.query_array}')
+    # if not os.path.exists(f'out_3d/{args.learning_rate}_{args.query_array}'):
+    #     os.mkdir(f'out_3d/{args.learning_rate}_{args.query_array}')
 
     device, gpu_array = helper.get_device(args)
     args.device = device
