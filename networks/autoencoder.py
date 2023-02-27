@@ -243,7 +243,7 @@ class get_model(nn.Module):
         
       
                 
-    def decoding(self, shape_embedding, points=None): 
+    def forward(self, shape_embedding, points=None): 
         if self.output_type == "Pointcloud":
             return self.decoder(shape_embedding)
         else:    
@@ -259,7 +259,7 @@ class get_model(nn.Module):
         return loss 
     
 
-    def forward(self, data_input, query_points=None):
-        shape_embs = self.encoder(data_input)  
-        pred = self.decoding(shape_embs, points=query_points)
-        return pred, shape_embs
+    # def forward(self, data_input, query_points=None):
+    #     shape_embs = self.encoder(data_input)  
+    #     pred = self.decoding(shape_embs, points=query_points)
+    #     return pred, shape_embs
