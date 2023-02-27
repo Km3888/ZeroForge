@@ -29,17 +29,22 @@ from torch.utils.tensorboard import SummaryWriter
 import PIL
 import sys
 import numpy as np
+import torch.nn as nn
 
-def clip_loss(args,query_array,clip_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features):
+def get_type(visual_model):
+    return visual_model.conv1.weight.dtype
+
+def clip_loss(args,query_array,visual_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features):
     # text_emb,ims = generate_single_query(args,clip_model,autoencoder,latent_flow_model,renderer,query,args.batch_size,rotation,resizer,iter)
-    out_3d = gen_shapes(query_array,args,clip_model,autoencoder,latent_flow_model,text_features)
+    out_3d = gen_shapes(query_array,args,visual_model,autoencoder,latent_flow_model,text_features)
     out_3d_soft = torch.sigmoid(args.beta*(out_3d-args.threshold))#.clone()
     
     #REFACTOR put all these into a single method which works for hard or soft
     ims = renderer.render(out_3d_soft).double()
     ims = resizer(ims)
 
-    im_embs=clip_model.encode_image(ims)
+    # im_embs=clip_model.encode_image(ims)
+    im_embs=visual_model(ims.type(visual_model_type))
     if args.renderer=='ea':
         #baseline renderer gives 3 dimensions
         text_features=text_features.unsqueeze(1).expand(-1,3,-1).reshape(-1,512)
@@ -95,8 +100,8 @@ def get_text_embeddings(args,clip_model,query_array):
 
     return text_features
 
-def gen_shapes(query_array,args,clip_model,autoencoder,latent_flow_model,text_features):
-    clip_model.eval()
+def gen_shapes(query_array,args,visual_model,autoencoder,latent_flow_model,text_features):
+    # clip_model.eval()
     autoencoder.train()
     latent_flow_model.eval() # has to be in .eval() mode for the sampling to work (which is bad but whatever)
     
@@ -110,32 +115,35 @@ def gen_shapes(query_array,args,clip_model,autoencoder,latent_flow_model,text_fe
     noise = torch.Tensor(batch_size, args.emb_dims).normal_().to(args.device)
     decoder_embs = latent_flow_model.sample(batch_size, noise=noise, cond_inputs=text_features)
 
-    out_3d = autoencoder.decoding(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size).to(args.device)
+    # out_3d = autoencoder.decoding(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size).to(args.device)
+    out_3d = autoencoder(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size).to(args.device)
     return out_3d
 
-def do_eval(renderer,query_array,args,clip_model,autoencoder,latent_flow_model,resizer,iter,text_features=None):
-    out_3d = gen_shapes(query_array,args,clip_model,autoencoder,latent_flow_model,text_features)
+def do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features=None):
+    out_3d = gen_shapes(query_array,args,visual_model,autoencoder,latent_flow_model,text_features)
     #save out_3d to numpy file
-    # with open(f'out_3d/{args.learning_rate}_{args.query_array}/out_3d_{iter}.npy', 'wb') as f:
-    #     np.save(f, out_3d.cpu().detach().numpy())
+    os.makedirs(f'out_3d/{args.learning_rate}_{args.query_array}', exist_ok=True)
+    with open(f'out_3d/{args.learning_rate}_{args.query_array}/out_3d_{iter}.npy', 'wb') as f:
+        np.save(f, out_3d.cpu().detach().numpy())
     
     out_3d_hard = out_3d.detach() > args.threshold
     rgbs_hard = renderer.render(out_3d_hard.float()).double().to(args.device)
     rgbs_hard = resizer(rgbs_hard)
     
-    hard_im_embeddings = clip_model.encode_image(rgbs_hard)
+    # hard_im_embeddings = clip_model.encode_image(rgbs_hard)
+    hard_im_embeddings = visual_model(rgbs_hard.type(visual_model_type))
     
     if args.renderer=='ea':
         #baseline renderer gives 3 dimensions
         text_features=text_features.unsqueeze(1).expand(-1,3,-1).reshape(-1,512)
     hard_loss = -1*torch.cosine_similarity(text_features,hard_im_embeddings).mean()
     #write to tensorboard
-    voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard,args,clip_model,text_features,iter)
+    voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,iter)
     if args.use_tensorboard:
         args.writer.add_scalar('Loss/hard_loss', hard_loss, iter)
         args.writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
 
-def evaluate_true_voxel(out_3d,args,clip_model,text_features,i):
+def evaluate_true_voxel(out_3d,args,visual_model,text_features,i):
     # code for saving the "true" voxel image
     out_3d_hard = out_3d>args.threshold
     voxel_ims=[]
@@ -156,7 +164,10 @@ def evaluate_true_voxel(out_3d,args,clip_model,text_features,i):
     # #convert to 224x224 image with 3 channels
     voxel_tensor = T.Resize((224,224))(voxel_ims)
     # get CLIP embedding
-    voxel_image_embedding = clip_model.encode_image(voxel_tensor.to(args.device))
+    # voxel_image_embedding = clip_model.encode_image(voxel_tensor.to(args.device))
+    voxel_image_embedding = visual_model(voxel_tensor.to(args.device).type(visual_model_type))
+    print("voxel_image_embedding",voxel_image_embedding.shape)
+    print("text_features",text_features.shape)
     voxel_similarity = torch.cosine_similarity(text_features, voxel_image_embedding).mean()
     return voxel_similarity
 
@@ -196,7 +207,7 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     resizer = T.Resize(224)
     flow_optimizer=optim.Adam(latent_flow_model.parameters(), lr=args.learning_rate)
     net_optimizer=optim.Adam(autoencoder.parameters(), lr=args.learning_rate)
-    
+
     losses = []
     
     if args.query_array in query_arrays:
@@ -210,15 +221,29 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     if not os.path.exists('queries/%s' % args.query_array):
         os.makedirs('queries/%s' % args.query_array)
 
+    #remove text components from clip and free up memory
+    visual_model = clip_model.visual
+    del clip_model
+
+    #set gradient of clip model to false
+    for param in visual_model.parameters():
+        param.requires_grad = False
+    visual_model.eval()
+    torch.cuda.empty_cache()
+
+    global visual_model_type
+    visual_model_type = get_type(visual_model)
+    visual_model = nn.DataParallel(visual_model)
+
     for iter in range(20000):
         if not iter%100:
-            do_eval(renderer,query_array,args,clip_model,autoencoder,latent_flow_model,resizer,iter,text_features)
+            do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features)
             
 
         flow_optimizer.zero_grad()
         net_optimizer.zero_grad()
         
-        loss = clip_loss(args,query_array,clip_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features)        
+        loss = clip_loss(args,query_array,visual_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features)        
         
         loss.backward()
                 
@@ -243,9 +268,12 @@ def main(args):
     device, gpu_array = helper.get_device(args)
     args.device = device
     
+    print("Using device: ", device)
+
     args, clip_model = get_clip_model(args)
     
     net = autoencoder.get_model(args).to(args.device)
+
     if not args.uninitialized:
         checkpoint = torch.load(args.checkpoint_dir_base +"/"+ args.checkpoint +".pt", map_location=args.device)
         net.load_state_dict(checkpoint['model'])
@@ -266,6 +294,8 @@ def main(args):
     elif args.renderer == 'nvr+':
         renderer = NVR_Renderer()
         renderer.model.to(args.device)
+    net = nn.DataParallel(net)
+
     test_train(args,clip_model,net,latent_flow_network,renderer)
     
 query_arrays = {
