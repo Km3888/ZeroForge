@@ -54,8 +54,6 @@ def clip_loss(args,query_array,clip_model,autoencoder,latent_flow_model,renderer
 
     return loss
 
-
-
 def get_clip_model(args):
     if args.clip_model_type == "B-16":
         print("Bigger model is being used B-16")
@@ -130,26 +128,30 @@ def do_eval(renderer,query_array,args,clip_model,autoencoder,latent_flow_model,r
         text_features=text_features.unsqueeze(1).expand(-1,3,-1).reshape(-1,512)
     hard_loss = -1*torch.cosine_similarity(text_features,hard_im_embeddings).mean()
     #write to tensorboard
-    voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard,args,clip_model,text_features,iter)
+    voxel_render_loss = -1* evaluate_true_voxel(args,out_3d_hard,clip_model,text_features,iter)
     if args.use_tensorboard:
         args.writer.add_scalar('Loss/hard_loss', hard_loss, iter)
         args.writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
 
-def evaluate_true_voxel(out_3d,args,clip_model,text_features,i):
+def evaluate_true_voxel(args,out_3d,clip_model,text_features,i):
     # code for saving the "true" voxel image
     out_3d_hard = out_3d>args.threshold
     voxel_ims=[]
     num_shapes = out_3d_hard.shape[0]
     for shape in range(num_shapes):
-        voxel_save(out_3d_hard[shape].squeeze().cpu().detach(), None, out_file='queries/%s/sample_%s_%s.png' % (args.query_array,i,shape))
+        save_path = 'queries/%s/sample_%s_%s.png' % (args.writer.log_dir[5:],i,shape)
+        voxel_save(out_3d_hard[shape].squeeze().detach().cpu(), None, out_file=save_path)
         # load the image that was saved and transform it to a tensor
-        voxel_im = PIL.Image.open('queries/%s/sample_%s_%s.png' % (args.query_array,i,shape)).convert('RGB')
+        voxel_im = PIL.Image.open(save_path).convert('RGB')
         voxel_tensor = T.ToTensor()(voxel_im)
         voxel_ims.append(voxel_tensor.unsqueeze(0))
     
     voxel_ims = torch.cat(voxel_ims,0)
     grid = torchvision.utils.make_grid(voxel_ims, nrow=num_shapes)
-        
+
+    for shape in range(num_shapes):
+        save_path = 'queries/%s/sample_%s_%s.png' % (args.writer.log_dir[5:],i,shape)
+        os.remove(save_path)
 
     if args.use_tensorboard:
         args.writer.add_image('voxel image', grid, i)
@@ -207,13 +209,12 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         query_array = query_array*args.num_views
     text_features = get_text_embeddings(args,clip_model,query_array).detach()
     # make directory for saving images with name of the text query using os.makedirs
-    if not os.path.exists('queries/%s' % args.query_array):
-        os.makedirs('queries/%s' % args.query_array)
+    if not os.path.exists('queries/%s' % args.writer.log_dir[5:]):
+        os.makedirs('queries/%s' % args.writer.log_dir[5:])
 
     for iter in range(20000):
-        if not iter%100:
+        if not iter%300:
             do_eval(renderer,query_array,args,clip_model,autoencoder,latent_flow_model,resizer,iter,text_features)
-            
 
         flow_optimizer.zero_grad()
         net_optimizer.zero_grad()
@@ -230,11 +231,15 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         flow_optimizer.step()
         net_optimizer.step()
     
+    #save latent flow and AE networks
+    torch.save(latent_flow_model.state_dict(), 'queries/%s/latent_w_model.pt' % args.writer.log_dir[5:])
+    torat.save(autoencoder.state_dict(), 'queries/%s/aencoder.pt' % args.writer.log_dir[5:])
+    
     print(losses)
             
 def main(args):
     if args.use_tensorboard:
-        args.writer=SummaryWriter(comment='_%s_lr=%s_beta=%s_gpu=%s_baseline=%s_v=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized,args.num_voxels))
+        args.writer=SummaryWriter(comment='_%s_lr=%s_beta=%s_gpu=%s_baseline=%s_v=%s_k=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized,args.num_voxels,args.num_views))
     assert args.renderer in ['ea','nvr+']
     
     # if not os.path.exists(f'out_3d/{args.learning_rate}_{args.query_array}'):
