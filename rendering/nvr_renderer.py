@@ -8,7 +8,7 @@ class NVR_Renderer:
     
     def __init__(self):
         self.model = NVR_Plus()
-        self.model.load_state_dict(torch.load('rendering/nvr_torch/nvr_plus.pt'))
+        self.model.load_state_dict(torch.load('/scratch/mp5847/general_clip_forge/nvr_plus.pt'))
         self.model.to('cuda:0') #TODO make device arbitrary
         self.model.eval()
     

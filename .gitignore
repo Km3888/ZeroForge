@@ -66,3 +66,6 @@ requirements.txt
 nvr_wineglass.png
 preprocess_diff=False.png
 preprocess_diff=True.png
+env.yml
+git.txt
+rendering/nvr_torch/nvr_plus.pt
