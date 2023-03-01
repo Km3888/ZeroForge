@@ -98,8 +98,7 @@ def get_text_embeddings(args,clip_model,query_array):
 
     return text_features
 
-def gen_shapes(query_array,args,clip_model,autoencoder,latent_flow_model,text_features):
-    clip_model.eval()
+def gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features):
     autoencoder.train()
     latent_flow_model.eval() # has to be in .eval() mode for the sampling to work (which is bad but whatever)
     
@@ -165,7 +164,8 @@ def evaluate_true_voxel(out_3d,args,visual_model,text_features,i):
     # #convert to 224x224 image with 3 channels
     voxel_tensor = T.Resize((224,224))(voxel_ims)
     # get CLIP embedding
-    voxel_image_embedding = clip_model.encode_image(voxel_tensor.to(args.device))
+    # voxel_image_embedding = clip_model.encode_image(voxel_tensor.to(args.device))
+    voxel_image_embedding = visual_model(voxel_tensor.to(args.device).type(visual_model_type))
     voxel_similarity = torch.cosine_similarity(text_features, voxel_image_embedding).mean()
     return voxel_similarity
 
@@ -218,6 +218,20 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     # make directory for saving images with name of the text query using os.makedirs
     if not os.path.exists('queries/%s' % args.writer.log_dir[5:]):
         os.makedirs('queries/%s' % args.writer.log_dir[5:])
+
+    #remove text components from clip and free up memory
+    visual_model = clip_model.visual
+    del clip_model
+
+    #set gradient of clip model to false
+    for param in visual_model.parameters():
+        param.requires_grad = False
+    visual_model.eval()
+    torch.cuda.empty_cache()
+
+    global visual_model_type
+    visual_model_type = get_type(visual_model)
+    visual_model = nn.DataParallel(visual_model)
 
     for iter in range(20000):
         if not iter%300:
