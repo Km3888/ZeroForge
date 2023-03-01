@@ -112,8 +112,7 @@ def gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features):
     noise = torch.Tensor(batch_size, args.emb_dims).normal_().to(args.device)
     decoder_embs = latent_flow_model.sample(batch_size, noise=noise, cond_inputs=text_features)
 
-    # out_3d = autoencoder.decoding(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size).to(args.device)
-    out_3d = autoencoder(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size).to(args.device)
+    out_3d = autoencoder.decoding(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size).to(args.device)
     return out_3d
 
 def do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features=None):
