@@ -40,7 +40,7 @@ def clip_loss(args,query_array,visual_model,autoencoder,latent_flow_model,render
     out_3d_soft = torch.sigmoid(args.beta*(out_3d-args.threshold))#.clone()
     
     #REFACTOR put all these into a single method which works for hard or soft
-    ims = renderer.render(out_3d_soft).double()
+    ims = renderer.render(out_3d_soft,orthogonal=args.orthogonal).double()
     ims = resizer(ims)
 
     # im_embs=clip_model.encode_image(ims)
@@ -122,7 +122,7 @@ def do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model
     #     np.save(f, out_3d.cpu().detach().numpy())
     
     out_3d_hard = out_3d.detach() > args.threshold
-    rgbs_hard = renderer.render(out_3d_hard.float()).double().to(args.device)
+    rgbs_hard = renderer.render(out_3d_hard.float(),orthogonal=args.orthogonal).double().to(args.device)
     rgbs_hard = resizer(rgbs_hard)
     
     # hard_im_embeddings = clip_model.encode_image(rgbs_hard)
@@ -193,6 +193,7 @@ def get_local_parser(mode="args"):
     parser.add_argument("--num_voxels",  type=int, default=32, help='number of voxels')
     # parser.add_argument("--threshold",  type=float, default=0.5, help='threshold for voxelization')
     parser.add_argument("--renderer",  type=str, default='ea')
+    parser.add_argument("--orthogonal",  type=bool, default=False, help='use orthogonal views')
     parser.add_argument("--setting", type=int, default=None)
     if mode == "args":
         args = parser.parse_args()

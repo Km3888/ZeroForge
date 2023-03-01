@@ -12,7 +12,7 @@ class NVR_Renderer:
         self.model.to('cuda:0') #TODO make device arbitrary
         self.model.eval()
     
-    def render(self,voxels):
+    def render(self,voxels,orthogonal=False):
         light_position = np.array([-1.0901234 ,  0.01720496,  2.6110773]).astype(np.float32)
         light_position = np.expand_dims(light_position,axis=(0)).astype(np.float32)
         light_position = torch.from_numpy(light_position).to(voxels.device)
@@ -22,7 +22,17 @@ class NVR_Renderer:
         rotation_x = -np.deg2rad(np.random.uniform(0,360,size=(batch_size,1))).astype(np.float32)
         rotation_y = -np.deg2rad(np.random.uniform(0,360,size=(batch_size,1))).astype(np.float32)
         rotation_z = -np.deg2rad(np.random.uniform(0,360,size=(batch_size,1))).astype(np.float32)
+
         rotation_angles = np.concatenate([rotation_x,rotation_y,rotation_z],axis=1)
+
+
+        if orthogonal:
+            assert batch_size ==3
+            rotations_1 = np.random.uniform(0,360,size=(batch_size,3))
+            rotations_2 = rotations_1 + np.array([0,0,90]).expand_dims(0)
+            rotations_3 = rotations_1 + np.array([0,90,0]).expand_dims(0)
+            rotations = np.concatenate([rotations_1,rotations_2,rotations_3],axis=0)
+
         
         final_composite,interpolated_voxels = diff_preprocess(voxels,rotation_angles)
         final_composite = (final_composite - 0.5)*2
