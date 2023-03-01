@@ -5,7 +5,7 @@
 
 
 python continued_training.py --num_voxels 128 --learning_rate 01e-05 \
-   --gpu 0 --beta 150.0 --query_array "fork" --num_views 2 \
+   --gpu 0 --beta 150.0 --query_array "fork" --num_views 10 \
    --checkpoint_dir_base /scratch/mp5847/general_clip_forge/exps/models/autoencoder \
    --checkpoint best_iou --checkpoint_dir_prior \
-   /scratch/mp5847/general_clip_forge/exps/models/prior --checkpoint_nf best --renderer ea
+   /scratch/mp5847/general_clip_forge/exps/models/prior --checkpoint_nf best --renderer nvr+
