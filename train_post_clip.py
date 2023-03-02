@@ -317,12 +317,13 @@ def main():
     net.load_state_dict(checkpoint['model'])
     net.eval()
     
-    logging.info("#############################")
-    logging.info("Getting train shape embeddings and condition embedding")
-    train_shape_embeddings, train_cond_embeddings = get_condition_embeddings(args, net, clip_model, train_dataloader, times=args.num_views)
-    logging.info("Train Embedding Shape {}, Train Condition Embedding {}".format(train_shape_embeddings.shape, train_cond_embeddings.shape))
-    train_dataset_new = torch.utils.data.TensorDataset(torch.from_numpy(train_shape_embeddings), torch.from_numpy(train_cond_embeddings))
-    train_dataloader_new = DataLoader(train_dataset_new, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, drop_last=True)
+    if args.train_mode!="test":
+        logging.info("#############################")
+        logging.info("Getting train shape embeddings and condition embedding")
+        train_shape_embeddings, train_cond_embeddings = get_condition_embeddings(args, net, clip_model, train_dataloader, times=args.num_views)
+        logging.info("Train Embedding Shape {}, Train Condition Embedding {}".format(train_shape_embeddings.shape, train_cond_embeddings.shape))
+        train_dataset_new = torch.utils.data.TensorDataset(torch.from_numpy(train_shape_embeddings), torch.from_numpy(train_cond_embeddings))
+        train_dataloader_new = DataLoader(train_dataset_new, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, drop_last=True)
     
     logging.info("Getting val shape embeddings and condition embedding")
     val_shape_embeddings, val_cond_embeddings = get_condition_embeddings(args, net, clip_model, val_dataloader, times=1)
@@ -334,7 +335,22 @@ def main():
     latent_flow_network = latent_flows.get_generator(args.emb_dims, args.cond_emb_dim, device, flow_type=args.flow_type, num_blocks=args.num_blocks, num_hidden=args.num_hidden)
     
     if args.train_mode == "test":
-        pass
+        checkpoint_dir = args.latent_load_checkpoint
+        #iterate over all files in args.latent_load_checkpoint directory that end in .pt
+        for file in os.listdir(checkpoint_dir):
+            if file.endswith(".pt"):
+                checkpoint = torch.load(checkpoint_dir + "/" + file, map_location=args.device)
+                latent_flow_network.load_state_dict(checkpoint['model'])
+                val_loss = val_one_epoch(args, latent_flow_network, val_dataloader_new,  0)
+                #open clip_forge.txt and write the val loss along with the filename on a new line
+                with open(checkpoint_dir + "/clip_forge_losses.txt", "a") as f:
+                    f.write(file + ":" + str(val_loss)+"\n")
+        import sys
+        sys.exit(0)   
+        checkpoint = torch.load(checkpoint_dir, map_location=args.device)
+        latent_flow_network.load_state_dict(checkpoint['model'])
+        val_loss = val_one_epoch(args, latent_flow_network, val_dataloader_new,  0)
+        
     else: 
         optimizer = torch.optim.Adam(latent_flow_network.parameters(), lr=0.00003)
         scheduler = lr_scheduler.CosineAnnealingLR(optimizer, args.num_iterations, 0.000001)
