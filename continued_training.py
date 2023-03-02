@@ -236,8 +236,12 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         
         if not iter%300:
             do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features)
+        
+        if not (iter%5000) and iter!=0:
+            #save encoder and latent flow network
+            torch.save(latent_flow_model.state_dict(), 'queries/%s/flow_model_%s.pt' % (args.writer.log_dir[5:],iter))
+            torat.save(autoencoder.encoder.state_dict(), 'queries/%s/aencoder_%s.pt' % (args.writer.log_dir[5:],iter))
             
-
         flow_optimizer.zero_grad()
         net_optimizer.zero_grad()
         
@@ -256,8 +260,8 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
             print('finished first iter')
     
     #save latent flow and AE networks
-    torch.save(latent_flow_model.state_dict(), 'queries/%s/latent_w_model.pt' % args.writer.log_dir[5:])
-    torat.save(autoencoder.state_dict(), 'queries/%s/aencoder.pt' % args.writer.log_dir[5:])
+    torch.save(latent_flow_model.state_dict(), 'queries/%s/flow_model.pt' % args.writer.log_dir[5:])
+    torch.save(autoencoder.encoder.state_dict(), 'queries/%s/final_aencoder.pt' % args.writer.log_dir[5:])
     
     print(losses)
             
