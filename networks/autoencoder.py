@@ -263,3 +263,15 @@ class get_model(nn.Module):
         shape_embs = self.encoder(data_input)  
         pred = self.decoding(shape_embs, points=query_points)
         return pred, shape_embs
+    
+class EncoderWrapper(nn.Module):
+    
+    def __init__(self,args):
+        super(EncoderWrapper,self).__init__()
+        self.encoder = get_model(args)
+    
+    def forward(self,shape_embedding,points=None):
+        return self.encoder.decoding(shape_embedding,points)
+        
+    def load_state_dict(self,ck):
+        self.encoder.load_state_dict(ck)

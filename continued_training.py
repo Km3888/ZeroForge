@@ -36,7 +36,7 @@ def get_type(visual_model):
 
 def clip_loss(args,query_array,visual_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features):
     # text_emb,ims = generate_single_query(args,clip_model,autoencoder,latent_flow_model,renderer,query,args.batch_size,rotation,resizer,iter)
-    out_3d = gen_shapes(query_array,args,visual_model,autoencoder,latent_flow_model,text_features)
+    out_3d = gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features)
     out_3d_soft = torch.sigmoid(args.beta*(out_3d-args.threshold))#.clone()
     
     #REFACTOR put all these into a single method which works for hard or soft
@@ -112,11 +112,11 @@ def gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features):
     noise = torch.Tensor(batch_size, args.emb_dims).normal_().to(args.device)
     decoder_embs = latent_flow_model.sample(batch_size, noise=noise, cond_inputs=text_features)
 
-    out_3d = autoencoder.decoding(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size).to(args.device)
+    out_3d = autoencoder(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size).to(args.device)
     return out_3d
 
-def do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features=None):
-    out_3d = gen_shapes(query_array,args,visual_model,autoencoder,latent_flow_model,text_features)
+def do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features):
+    out_3d = gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features)
     #save out_3d to numpy file
     # with open(f'out_3d/{args.learning_rate}_{args.query_array}/out_3d_{iter}.npy', 'wb') as f:
     #     np.save(f, out_3d.cpu().detach().numpy())
@@ -233,6 +233,7 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     visual_model = nn.DataParallel(visual_model)
 
     for iter in range(20000):
+        
         if not iter%300:
             do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features)
             
@@ -251,6 +252,8 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         
         flow_optimizer.step()
         net_optimizer.step()
+        if not iter:
+            print('finished first iter')
     
     #save latent flow and AE networks
     torch.save(latent_flow_model.state_dict(), 'queries/%s/latent_w_model.pt' % args.writer.log_dir[5:])
@@ -273,7 +276,7 @@ def main(args):
 
     args, clip_model = get_clip_model(args)
     
-    net = autoencoder.get_model(args).to(args.device)
+    net = autoencoder.EncoderWrapper(args).to(args.device)
 
     if not args.uninitialized:
         checkpoint = torch.load(args.checkpoint_dir_base +"/"+ args.checkpoint +".pt", map_location=args.device)
