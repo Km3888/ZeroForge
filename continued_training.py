@@ -234,7 +234,6 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     visual_model = nn.DataParallel(visual_model)
 
     for iter in range(20000):
-<<<<<<< HEAD
         if args.switch_point is not None and iter == args.switch_point:
             args.renderer = 'nvr+'
             renderer = NVR_Renderer()
@@ -243,10 +242,6 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         if not iter%300:
             do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features)
                     
-=======
-        
-        if not iter%300:
-            do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features)
         
         if not (iter%5000) and iter!=0:
             #save encoder and latent flow network
@@ -257,7 +252,6 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         flow_optimizer.zero_grad()
         net_optimizer.zero_grad()
         
->>>>>>> tf_layer
         loss = clip_loss(args,query_array,visual_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features)        
         
         loss.backward()
