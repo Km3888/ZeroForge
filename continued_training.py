@@ -268,7 +268,7 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
             
 def main(args):
     if args.use_tensorboard:
-        args.writer=SummaryWriter(comment='_%s_lr=%s_beta=%s_gpu=%s_baseline=%s_v=%s_k=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized,args.num_voxels,args.num_views))
+        args.writer=SummaryWriter(comment='_%s_lr=%s_beta=%s_gpu=%s_baseline=%s_v=%s_k=%s_r=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized,args.num_voxels,args.num_views,args.renderer))
     assert args.renderer in ['ea','nvr+']
     
     # if not os.path.exists(f'out_3d/{args.learning_rate}_{args.query_array}'):
@@ -314,7 +314,7 @@ query_arrays = {
                 "hammer": ["hammer"],
                 "six": ['wineglass','spoon','fork','knife','screwdriver','hammer'],
                 "nine": ['wineglass','spoon','fork','knife','screwdriver','hammer',"soccer ball", "football","plate"],
-                "fourteen": ["wineglass','spoon','fork','knife','screwdriver','hammer","pencil","screw","screwdriver","plate","mushroom","umbrella","thimble","sombrero","sandal"]
+                "fourteen": ["wineglass','spoon','fork','knife','screwdriver','hammer","pencil","screw","plate","mushroom","umbrella","thimble","sombrero","sandal"]
 }
 #REFACTOR put query arrays in a separate file
 
