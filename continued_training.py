@@ -36,7 +36,7 @@ def get_type(visual_model):
 
 def clip_loss(args,query_array,visual_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features):
     # text_emb,ims = generate_single_query(args,clip_model,autoencoder,latent_flow_model,renderer,query,args.batch_size,rotation,resizer,iter)
-    out_3d = gen_shapes(query_array,args,visual_model,autoencoder,latent_flow_model,text_features)
+    out_3d = gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features)
     out_3d_soft = torch.sigmoid(args.beta*(out_3d-args.threshold))#.clone()
     
     #REFACTOR put all these into a single method which works for hard or soft
@@ -112,11 +112,11 @@ def gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features):
     noise = torch.Tensor(batch_size, args.emb_dims).normal_().to(args.device)
     decoder_embs = latent_flow_model.sample(batch_size, noise=noise, cond_inputs=text_features)
 
-    out_3d = autoencoder.decoding(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size).to(args.device)
+    out_3d = autoencoder(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size).to(args.device)
     return out_3d
 
-def do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features=None):
-    out_3d = gen_shapes(query_array,args,visual_model,autoencoder,latent_flow_model,text_features)
+def do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features):
+    out_3d = gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features)
     #save out_3d to numpy file
     # with open(f'out_3d/{args.learning_rate}_{args.query_array}/out_3d_{iter}.npy', 'wb') as f:
     #     np.save(f, out_3d.cpu().detach().numpy())
@@ -144,7 +144,7 @@ def evaluate_true_voxel(out_3d,args,visual_model,text_features,i):
     voxel_ims=[]
     num_shapes = out_3d_hard.shape[0]
     for shape in range(num_shapes):
-        save_path = 'queries/%s/sample_%s_%s.png' % (args.writer.log_dir[5:],i,shape)
+        save_path = '/scratch/km3888/queries/%s/sample_%s_%s.png' % (args.writer.log_dir[5:],i,shape)
         voxel_save(out_3d_hard[shape].squeeze().detach().cpu(), None, out_file=save_path)
         # load the image that was saved and transform it to a tensor
         voxel_im = PIL.Image.open(save_path).convert('RGB')
@@ -155,7 +155,7 @@ def evaluate_true_voxel(out_3d,args,visual_model,text_features,i):
     grid = torchvision.utils.make_grid(voxel_ims, nrow=num_shapes)
 
     for shape in range(num_shapes):
-        save_path = 'queries/%s/sample_%s_%s.png' % (args.writer.log_dir[5:],i,shape)
+        save_path = '/scratch/km3888/queries/%s/sample_%s_%s.png' % (args.writer.log_dir[5:],i,shape)
         os.remove(save_path)
 
     if args.use_tensorboard:
@@ -216,8 +216,8 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         query_array = query_array*args.num_views
     text_features = get_text_embeddings(args,clip_model,query_array).detach()
     # make directory for saving images with name of the text query using os.makedirs
-    if not os.path.exists('queries/%s' % args.writer.log_dir[5:]):
-        os.makedirs('queries/%s' % args.writer.log_dir[5:])
+    if not os.path.exists('/scratch/km3888/queries/%s' % args.writer.log_dir[5:]):
+        os.makedirs('/scratch/km3888/queries/%s' % args.writer.log_dir[5:])
 
     #remove text components from clip and free up memory
     visual_model = clip_model.visual
@@ -234,6 +234,7 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     visual_model = nn.DataParallel(visual_model)
 
     for iter in range(20000):
+<<<<<<< HEAD
         if args.switch_point is not None and iter == args.switch_point:
             args.renderer = 'nvr+'
             renderer = NVR_Renderer()
@@ -242,6 +243,21 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         if not iter%300:
             do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features)
                     
+=======
+        
+        if not iter%300:
+            do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features)
+        
+        if not (iter%5000) and iter!=0:
+            #save encoder and latent flow network
+            torch.save(latent_flow_model.state_dict(), '/scratch/km3888/queries/%s/flow_model_%s.pt' % (args.writer.log_dir[5:],iter))
+            torch.save(autoencoder.module.encoder.state_dict(), '/scratch/km3888/queries/%s/aencoder_%s.pt' % (args.writer.log_dir[5:],iter))
+            
+            
+        flow_optimizer.zero_grad()
+        net_optimizer.zero_grad()
+        
+>>>>>>> tf_layer
         loss = clip_loss(args,query_array,visual_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features)        
         
         loss.backward()
@@ -253,10 +269,12 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         
         flow_optimizer.step()
         net_optimizer.step()
+        if not iter:
+            print('finished first iter')
     
     #save latent flow and AE networks
-    torch.save(latent_flow_model.state_dict(), 'queries/%s/latent_w_model.pt' % args.writer.log_dir[5:])
-    torat.save(autoencoder.state_dict(), 'queries/%s/aencoder.pt' % args.writer.log_dir[5:])
+    torch.save(latent_flow_model.state_dict(), '/scratch/km3888/queries/%s/final_flow_model.pt' % args.writer.log_dir[5:])
+    torch.save(autoencoder.module.encoder.state_dict(), '/scratch/km3888/queries/%s/final_aencoder.pt' % args.writer.log_dir[5:])
     
     print(losses)
             
@@ -275,7 +293,7 @@ def main(args):
 
     args, clip_model = get_clip_model(args)
     
-    net = autoencoder.get_model(args).to(args.device)
+    net = autoencoder.EncoderWrapper(args).to(args.device)
 
     if not args.uninitialized:
         checkpoint = torch.load(args.checkpoint_dir_base +"/"+ args.checkpoint +".pt", map_location=args.device)
@@ -317,3 +335,6 @@ if __name__=="__main__":
     print('renderer %s' % args.renderer)
     import sys; sys.stdout.flush()
     main(args)
+    
+    sys.stdout.write(args.writer.log_dir[:5])
+    sys.stdout.flush()
