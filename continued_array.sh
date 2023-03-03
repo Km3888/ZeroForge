@@ -10,8 +10,8 @@
 #SBATCH --mail-type=ALL
 #SBATCH --output=/home/km3888/general_clip_forge/slurm/job%A_%a.out
 #SBATCH --error=/home/km3888/general_clip_forge/slurm/job%A_%a.err
-#SBATCH --gres=gpu:a100:1
-#SBATCH --array=0-5
+#SBATCH --gres=gpu:a100:2
+#SBATCH --array=0-41
 
 module purge
 
@@ -26,8 +26,8 @@ echo ${SLURM_ARRAY_TASK_ID}
 
 singularity exec --nv --overlay $OVERLAY_FILE $SINGULARITY_IMAGE /bin/bash \
 -c "source /ext3/miniconda3/bin/activate;\
-python job_array.py --setting ${SLURM_ARRAY_TASK_ID}\
- --num_voxels 128 --gpu 0 --query_array "airplane" \
+python job_array.py --setting ${SLURM_ARRAY_TASK_ID} \
+--num_voxels 128 --gpu 0 --query_array "airplane" \
 --checkpoint_dir_base ./exps/models/autoencoder \
 --checkpoint best_iou --checkpoint_dir_prior \
 ./exps/models/prior/ --checkpoint_nf best \
