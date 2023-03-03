@@ -6,9 +6,9 @@ setting_names= ['beta','learning_rate','num_views','renderer','query_array']
 
 settings = [[150],
             [01e-05],
-            [1,4,6],
+            [3,10],
             ['nvr+'],
-            ['fork','spoon']]
+            ["wineglass","spoon","fork",'knife','screwdriver','hammer',"pencil","screw","plate","mushroom","umbrella","thimble","sombrero","sandal"]]
 
 
 num_settings = 1
