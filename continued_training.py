@@ -192,6 +192,7 @@ def get_local_parser(mode="args"):
     parser.add_argument("--uninitialized",  type=bool, default=False, help='Use untrained networks')
     parser.add_argument("--num_voxels",  type=int, default=32, help='number of voxels')
     # parser.add_argument("--threshold",  type=float, default=0.5, help='threshold for voxelization')
+    parser.add_argument("--switch_point",type=float, default=None, help='switch point for the renderer')
     parser.add_argument("--renderer",  type=str, default='ea')
     parser.add_argument("--setting", type=int, default=None)
     if mode == "args":
@@ -233,9 +234,14 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     visual_model = nn.DataParallel(visual_model)
 
     for iter in range(20000):
-        
+        if args.switch_point is not None and iter == args.switch_point:
+            args.renderer = 'nvr+'
+            renderer = NVR_Renderer()
+            renderer.model.to(args.device)
+
         if not iter%300:
             do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features)
+                    
         
         if not (iter%5000) and iter!=0:
             #save encoder and latent flow network
@@ -298,7 +304,7 @@ def main(args):
         latent_flow_network.load_state_dict(checkpoint['model'])
     
     param_dict={'device':args.device,'cube_len':args.num_voxels}
-    if args.renderer == 'ea':
+    if args.renderer == 'ea' or args.switch_point is not None:
         renderer=BaselineRenderer('absorption_only',param_dict)
     elif args.renderer == 'nvr+':
         renderer = NVR_Renderer()
