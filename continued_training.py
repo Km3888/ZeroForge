@@ -59,8 +59,6 @@ def clip_loss(args,query_array,visual_model,autoencoder,latent_flow_model,render
 
     return loss
 
-
-
 def get_clip_model(args):
     if args.clip_model_type == "B-16":
         print("Bigger model is being used B-16")
@@ -100,8 +98,12 @@ def get_text_embeddings(args,clip_model,query_array):
 
     return text_features
 
+<<<<<<< HEAD
 def gen_shapes(query_array,args,visual_model,autoencoder,latent_flow_model,text_features):
     # clip_model.eval()
+=======
+def gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features):
+>>>>>>> 692b88bf5cc2d20cb188e353d44b7051ae1000db
     autoencoder.train()
     latent_flow_model.eval() # has to be in .eval() mode for the sampling to work (which is bad but whatever)
     
@@ -149,15 +151,19 @@ def evaluate_true_voxel(out_3d,args,visual_model,text_features,i):
     voxel_ims=[]
     num_shapes = out_3d_hard.shape[0]
     for shape in range(num_shapes):
-        voxel_save(out_3d_hard[shape].squeeze().cpu().detach(), None, out_file='queries/%s/sample_%s_%s.png' % (args.query_array,i,shape))
+        save_path = 'queries/%s/sample_%s_%s.png' % (args.writer.log_dir[5:],i,shape)
+        voxel_save(out_3d_hard[shape].squeeze().detach().cpu(), None, out_file=save_path)
         # load the image that was saved and transform it to a tensor
-        voxel_im = PIL.Image.open('queries/%s/sample_%s_%s.png' % (args.query_array,i,shape)).convert('RGB')
+        voxel_im = PIL.Image.open(save_path).convert('RGB')
         voxel_tensor = T.ToTensor()(voxel_im)
         voxel_ims.append(voxel_tensor.unsqueeze(0))
     
     voxel_ims = torch.cat(voxel_ims,0)
     grid = torchvision.utils.make_grid(voxel_ims, nrow=num_shapes)
-        
+
+    for shape in range(num_shapes):
+        save_path = 'queries/%s/sample_%s_%s.png' % (args.writer.log_dir[5:],i,shape)
+        os.remove(save_path)
 
     if args.use_tensorboard:
         args.writer.add_image('voxel image', grid, i)
@@ -166,8 +172,11 @@ def evaluate_true_voxel(out_3d,args,visual_model,text_features,i):
     # get CLIP embedding
     # voxel_image_embedding = clip_model.encode_image(voxel_tensor.to(args.device))
     voxel_image_embedding = visual_model(voxel_tensor.to(args.device).type(visual_model_type))
+<<<<<<< HEAD
     print("voxel_image_embedding",voxel_image_embedding.shape)
     print("text_features",text_features.shape)
+=======
+>>>>>>> 692b88bf5cc2d20cb188e353d44b7051ae1000db
     voxel_similarity = torch.cosine_similarity(text_features, voxel_image_embedding).mean()
     return voxel_similarity
 
@@ -218,8 +227,22 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         query_array = query_array*args.num_views
     text_features = get_text_embeddings(args,clip_model,query_array).detach()
     # make directory for saving images with name of the text query using os.makedirs
-    if not os.path.exists('queries/%s' % args.query_array):
-        os.makedirs('queries/%s' % args.query_array)
+    if not os.path.exists('queries/%s' % args.writer.log_dir[5:]):
+        os.makedirs('queries/%s' % args.writer.log_dir[5:])
+
+    #remove text components from clip and free up memory
+    visual_model = clip_model.visual
+    del clip_model
+
+    #set gradient of clip model to false
+    for param in visual_model.parameters():
+        param.requires_grad = False
+    visual_model.eval()
+    torch.cuda.empty_cache()
+
+    global visual_model_type
+    visual_model_type = get_type(visual_model)
+    visual_model = nn.DataParallel(visual_model)
 
     #remove text components from clip and free up memory
     visual_model = clip_model.visual
@@ -236,7 +259,11 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     visual_model = nn.DataParallel(visual_model)
 
     for iter in range(20000):
+<<<<<<< HEAD
         if not iter%100:
+=======
+        if not iter%300:
+>>>>>>> 692b88bf5cc2d20cb188e353d44b7051ae1000db
             do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features)
             
 
@@ -255,11 +282,15 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         flow_optimizer.step()
         net_optimizer.step()
     
+    #save latent flow and AE networks
+    torch.save(latent_flow_model.state_dict(), 'queries/%s/latent_w_model.pt' % args.writer.log_dir[5:])
+    torat.save(autoencoder.state_dict(), 'queries/%s/aencoder.pt' % args.writer.log_dir[5:])
+    
     print(losses)
             
 def main(args):
     if args.use_tensorboard:
-        args.writer=SummaryWriter(comment='_%s_lr=%s_beta=%s_gpu=%s_baseline=%s_v=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized,args.num_voxels))
+        args.writer=SummaryWriter(comment='_%s_lr=%s_beta=%s_gpu=%s_baseline=%s_v=%s_k=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized,args.num_voxels,args.num_views))
     assert args.renderer in ['ea','nvr+']
     
     # if not os.path.exists(f'out_3d/{args.learning_rate}_{args.query_array}'):
