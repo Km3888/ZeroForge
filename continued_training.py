@@ -275,7 +275,12 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
             
 def main(args):
     if args.use_tensorboard:
-        args.writer=SummaryWriter(comment='_%s_lr=%s_beta=%s_gpu=%s_baseline=%s_v=%s_k=%s_r=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized,args.num_voxels,args.num_views,args.renderer))
+        tensorboard_comment = '_%s_lr=%s_beta=%s_gpu=%s_baseline=%s_v=%s_k=%s_r=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized,args.num_voxels,args.num_views,args.renderer)
+        if args.switch_point is not None:
+            tensorboard_comment += '_s=%s' % args.switch_point
+        if args.orthogonal:
+            tensorboard_comment += '_orthogonal'
+        args.writer=SummaryWriter(comment=tensorboard_comment)
     assert args.renderer in ['ea','nvr+']
     
     # if not os.path.exists(f'out_3d/{args.learning_rate}_{args.query_array}'):
