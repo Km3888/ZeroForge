@@ -40,7 +40,7 @@ def clip_loss(args,query_array,visual_model,autoencoder,latent_flow_model,render
     out_3d_soft = torch.sigmoid(args.beta*(out_3d-args.threshold))#.clone()
     
     #REFACTOR put all these into a single method which works for hard or soft
-    ims = renderer.render(out_3d_soft).double()
+    ims = renderer.render(out_3d_soft,orthogonal=args.orthogonal).double()
     ims = resizer(ims)
 
     # im_embs=clip_model.encode_image(ims)
@@ -122,7 +122,7 @@ def do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model
     #     np.save(f, out_3d.cpu().detach().numpy())
     
     out_3d_hard = out_3d.detach() > args.threshold
-    rgbs_hard = renderer.render(out_3d_hard.float()).double().to(args.device)
+    rgbs_hard = renderer.render(out_3d_hard.float(),orthogonal=args.orthogonal).double().to(args.device)
     rgbs_hard = resizer(rgbs_hard)
     
     # hard_im_embeddings = clip_model.encode_image(rgbs_hard)
@@ -144,7 +144,7 @@ def evaluate_true_voxel(out_3d,args,visual_model,text_features,i):
     voxel_ims=[]
     num_shapes = out_3d_hard.shape[0]
     for shape in range(num_shapes):
-        save_path = 'queries/%s/sample_%s_%s.png' % (args.writer.log_dir[5:],i,shape)
+        save_path = '/scratch/km3888/queries/%s/sample_%s_%s.png' % (args.writer.log_dir[5:],i,shape)
         voxel_save(out_3d_hard[shape].squeeze().detach().cpu(), None, out_file=save_path)
         # load the image that was saved and transform it to a tensor
         voxel_im = PIL.Image.open(save_path).convert('RGB')
@@ -155,7 +155,7 @@ def evaluate_true_voxel(out_3d,args,visual_model,text_features,i):
     grid = torchvision.utils.make_grid(voxel_ims, nrow=num_shapes)
 
     for shape in range(num_shapes):
-        save_path = 'queries/%s/sample_%s_%s.png' % (args.writer.log_dir[5:],i,shape)
+        save_path = '/scratch/km3888/queries/%s/sample_%s_%s.png' % (args.writer.log_dir[5:],i,shape)
         os.remove(save_path)
 
     if args.use_tensorboard:
@@ -192,7 +192,9 @@ def get_local_parser(mode="args"):
     parser.add_argument("--uninitialized",  type=bool, default=False, help='Use untrained networks')
     parser.add_argument("--num_voxels",  type=int, default=32, help='number of voxels')
     # parser.add_argument("--threshold",  type=float, default=0.5, help='threshold for voxelization')
+    parser.add_argument("--switch_point",type=float, default=None, help='switch point for the renderer')
     parser.add_argument("--renderer",  type=str, default='ea')
+    parser.add_argument("--orthogonal",  type=bool, default=False, help='use orthogonal views')
     parser.add_argument("--setting", type=int, default=None)
     if mode == "args":
         args = parser.parse_args()
@@ -215,8 +217,8 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         query_array = query_array*args.num_views
     text_features = get_text_embeddings(args,clip_model,query_array).detach()
     # make directory for saving images with name of the text query using os.makedirs
-    if not os.path.exists('queries/%s' % args.writer.log_dir[5:]):
-        os.makedirs('queries/%s' % args.writer.log_dir[5:])
+    if not os.path.exists('/scratch/km3888/queries/%s' % args.writer.log_dir[5:]):
+        os.makedirs('/scratch/km3888/queries/%s' % args.writer.log_dir[5:])
 
     #remove text components from clip and free up memory
     visual_model = clip_model.visual
@@ -233,11 +235,21 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     visual_model = nn.DataParallel(visual_model)
 
     for iter in range(20000):
-        
+        if args.switch_point is not None and iter == args.switch_point:
+            args.renderer = 'nvr+'
+            renderer = NVR_Renderer()
+            renderer.model.to(args.device)
+
         if not iter%300:
             do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features)
+                    
+        
+        if not (iter%5000) and iter!=0:
+            #save encoder and latent flow network
+            torch.save(latent_flow_model.state_dict(), '/scratch/km3888/queries/%s/flow_model_%s.pt' % (args.writer.log_dir[5:],iter))
+            torch.save(autoencoder.module.encoder.state_dict(), '/scratch/km3888/queries/%s/aencoder_%s.pt' % (args.writer.log_dir[5:],iter))
             
-
+            
         flow_optimizer.zero_grad()
         net_optimizer.zero_grad()
         
@@ -256,14 +268,19 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
             print('finished first iter')
     
     #save latent flow and AE networks
-    torch.save(latent_flow_model.state_dict(), 'queries/%s/latent_w_model.pt' % args.writer.log_dir[5:])
-    torat.save(autoencoder.state_dict(), 'queries/%s/aencoder.pt' % args.writer.log_dir[5:])
+    torch.save(latent_flow_model.state_dict(), '/scratch/km3888/queries/%s/final_flow_model.pt' % args.writer.log_dir[5:])
+    torch.save(autoencoder.module.encoder.state_dict(), '/scratch/km3888/queries/%s/final_aencoder.pt' % args.writer.log_dir[5:])
     
     print(losses)
             
 def main(args):
     if args.use_tensorboard:
-        args.writer=SummaryWriter(comment='_%s_lr=%s_beta=%s_gpu=%s_baseline=%s_v=%s_k=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized,args.num_voxels,args.num_views))
+        tensorboard_comment = '_%s_lr=%s_beta=%s_gpu=%s_baseline=%s_v=%s_k=%s_r=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized,args.num_voxels,args.num_views,args.renderer)
+        if args.switch_point is not None:
+            tensorboard_comment += '_s=%s' % args.switch_point
+        if args.orthogonal:
+            tensorboard_comment += '_orthogonal'
+        args.writer=SummaryWriter(comment=tensorboard_comment)
     assert args.renderer in ['ea','nvr+']
     
     # if not os.path.exists(f'out_3d/{args.learning_rate}_{args.query_array}'):
@@ -293,7 +310,7 @@ def main(args):
         latent_flow_network.load_state_dict(checkpoint['model'])
     
     param_dict={'device':args.device,'cube_len':args.num_voxels}
-    if args.renderer == 'ea':
+    if args.renderer == 'ea' or args.switch_point is not None:
         renderer=BaselineRenderer('absorption_only',param_dict)
     elif args.renderer == 'nvr+':
         renderer = NVR_Renderer()
@@ -309,7 +326,7 @@ query_arrays = {
                 "hammer": ["hammer"],
                 "six": ['wineglass','spoon','fork','knife','screwdriver','hammer'],
                 "nine": ['wineglass','spoon','fork','knife','screwdriver','hammer',"soccer ball", "football","plate"],
-                "fourteen": ["wineglass','spoon','fork','knife','screwdriver','hammer","pencil","screw","screwdriver","plate","mushroom","umbrella","thimble","sombrero","sandal"]
+                "fourteen": ["wineglass','spoon','fork','knife','screwdriver','hammer","pencil","screw","plate","mushroom","umbrella","thimble","sombrero","sandal"]
 }
 #REFACTOR put query arrays in a separate file
 
@@ -318,3 +335,6 @@ if __name__=="__main__":
     print('renderer %s' % args.renderer)
     import sys; sys.stdout.flush()
     main(args)
+    
+    sys.stdout.write(args.writer.log_dir[:5])
+    sys.stdout.flush()
