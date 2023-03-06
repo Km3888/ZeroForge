@@ -69,3 +69,5 @@ preprocess_diff=True.png
 env.yml
 git.txt
 rendering/nvr_torch/nvr_plus.pt
+fetch_tensorboard.sh
+forge_losses.sh
