@@ -8,7 +8,7 @@ class BaselineRenderer:
         self.renderer = renderer_dict[renderer_type](param=param_dict)
         self.rotation = dt.Transform(param_dict['device'])
         
-    def render(self,volume):
+    def render(self,volume,orthogonal=False):
         outputs=[]
         rotated = self.rotation.rotate_random(volume.unsqueeze(1)).squeeze(1)
         for axis in range(1,4):

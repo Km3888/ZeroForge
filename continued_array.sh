@@ -2,7 +2,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=2
-#SBATCH --time=30:00:00
+#SBATCH --time=40:00:00
 #SBATCH --mem=50GB
 #SBATCH --job-name=continue_training
 #SBATCH --output=continue_training.out
@@ -27,6 +27,7 @@ echo ${SLURM_ARRAY_TASK_ID}
 singularity exec --nv --overlay $OVERLAY_FILE $SINGULARITY_IMAGE /bin/bash \
 -c "source /ext3/miniconda3/bin/activate;\
 python job_array.py --setting ${SLURM_ARRAY_TASK_ID} \
+--slurm_id ${SLURM_ARRAY_JOB_ID} \
 --num_voxels 128 --gpu 0 --query_array "airplane" \
 --checkpoint_dir_base ./exps/models/autoencoder \
 --checkpoint best_iou --checkpoint_dir_prior \

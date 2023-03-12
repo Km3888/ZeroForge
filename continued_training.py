@@ -98,8 +98,9 @@ def get_text_embeddings(args,clip_model,query_array):
 
     return text_features
 
+#TODO remove query_array param
 def gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features):
-    autoencoder.train()
+    autoencoder.train()#TODO don't do this in eval
     latent_flow_model.eval() # has to be in .eval() mode for the sampling to work (which is bad but whatever)
     
     voxel_size = args.num_voxels
@@ -120,29 +121,27 @@ def do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model
     #save out_3d to numpy file
     # with open(f'out_3d/{args.learning_rate}_{args.query_array}/out_3d_{iter}.npy', 'wb') as f:
     #     np.save(f, out_3d.cpu().detach().numpy())
-    
     out_3d_hard = out_3d.detach() > args.threshold
     rgbs_hard = renderer.render(out_3d_hard.float(),orthogonal=args.orthogonal).double().to(args.device)
     rgbs_hard = resizer(rgbs_hard)
-    
     # hard_im_embeddings = clip_model.encode_image(rgbs_hard)
     hard_im_embeddings = visual_model(rgbs_hard.type(visual_model_type))
-    
     if args.renderer=='ea':
         #baseline renderer gives 3 dimensions
-        text_features=text_features.unsqueeze(1).expand(-1,3,-1).reshape(-1,512)
-    hard_loss = -1*torch.cosine_similarity(text_features,hard_im_embeddings).mean()
+        hard_loss = -1*torch.cosine_similarity(text_features.unsqueeze(1).expand(-1,3,-1).reshape(-1,512),hard_im_embeddings).mean()
+    else:
+        hard_loss = -1*torch.cosine_similarity(text_features,hard_im_embeddings).mean()
     #write to tensorboard
     voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,iter)
     if args.use_tensorboard:
         args.writer.add_scalar('Loss/hard_loss', hard_loss, iter)
         args.writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
 
-def evaluate_true_voxel(out_3d,args,visual_model,text_features,i):
+def evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,i):
     # code for saving the "true" voxel image
-    out_3d_hard = out_3d>args.threshold
     voxel_ims=[]
     num_shapes = out_3d_hard.shape[0]
+    #num_shapes = min(num_shapes, 3)
     for shape in range(num_shapes):
         save_path = '/scratch/km3888/queries/%s/sample_%s_%s.png' % (args.writer.log_dir[5:],i,shape)
         voxel_save(out_3d_hard[shape].squeeze().detach().cpu(), None, out_file=save_path)
@@ -196,6 +195,7 @@ def get_local_parser(mode="args"):
     parser.add_argument("--renderer",  type=str, default='ea')
     parser.add_argument("--orthogonal",  type=bool, default=False, help='use orthogonal views')
     parser.add_argument("--setting", type=int, default=None)
+    parser.add_argument("--slurm_id", type=int, default=None)
     if mode == "args":
         args = parser.parse_args()
         return args
@@ -237,11 +237,13 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     for iter in range(20000):
         if args.switch_point is not None and iter == args.switch_point:
             args.renderer = 'nvr+'
-            renderer = NVR_Renderer()
+            args.num_view = 10
+            renderer = NVR_Renderer(args.device)
             renderer.model.to(args.device)
 
         if not iter%300:
-            do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features)
+            with torch.autocast('cuda'):
+                do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features)
                     
         
         if not (iter%5000) and iter!=0:
@@ -253,7 +255,8 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         flow_optimizer.zero_grad()
         net_optimizer.zero_grad()
         
-        loss = clip_loss(args,query_array,visual_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features)        
+        with torch.autocast('cuda'):
+            loss = clip_loss(args,query_array,visual_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features)        
         
         loss.backward()
                 
@@ -272,17 +275,24 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     torch.save(autoencoder.module.encoder.state_dict(), '/scratch/km3888/queries/%s/final_aencoder.pt' % args.writer.log_dir[5:])
     
     print(losses)
-            
-def main(args):
-    if args.use_tensorboard:
-        tensorboard_comment = '_%s_lr=%s_beta=%s_gpu=%s_baseline=%s_v=%s_k=%s_r=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized,args.num_voxels,args.num_views,args.renderer)
-        if args.switch_point is not None:
-            tensorboard_comment += '_s=%s' % args.switch_point
-        if args.orthogonal:
-            tensorboard_comment += '_orthogonal'
-        args.writer=SummaryWriter(comment=tensorboard_comment)
+
+def make_writer(args):
+    if not args.use_tensorboard:
+        return None
+    tensorboard_comment = '_%s_lr=%s_beta=%s_gpu=%s_baseline=%s_v=%s_k=%s_r=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized,args.num_voxels,args.num_views,args.renderer)
+    if args.switch_point is not None:
+        tensorboard_comment += '_s=%s' % args.switch_point
+    if args.orthogonal:
+        tensorboard_comment += '_orthogonal'
+    if args.slurm_id is not None:
+        tensorboard_comment += str(args.slurm_id)
+    tensorboard_comment += 'amp'
     assert args.renderer in ['ea','nvr+']
-    
+    return SummaryWriter(comment=tensorboard_comment)
+
+def main(args):
+    args.writer=make_writer(args)
+        
     # if not os.path.exists(f'out_3d/{args.learning_rate}_{args.query_array}'):
     #     os.mkdir(f'out_3d/{args.learning_rate}_{args.query_array}')
 
@@ -290,7 +300,6 @@ def main(args):
     args.device = device
     
     print("Using device: ", device)
-
     args, clip_model = get_clip_model(args)
     
     net = autoencoder.EncoderWrapper(args).to(args.device)
@@ -299,7 +308,8 @@ def main(args):
         checkpoint = torch.load(args.checkpoint_dir_base +"/"+ args.checkpoint +".pt", map_location=args.device)
         net.load_state_dict(checkpoint['model'])
         net.eval()
-    
+    #print the value for every input of the latent flow network
+
     latent_flow_network = latent_flows.get_generator(args.emb_dims, args.cond_emb_dim, device, flow_type=args.flow_type, num_blocks=args.num_blocks, num_hidden=args.num_hidden)
     if not args.uninitialized:
         print(args.checkpoint_dir_prior)
@@ -313,7 +323,7 @@ def main(args):
     if args.renderer == 'ea' or args.switch_point is not None:
         renderer=BaselineRenderer('absorption_only',param_dict)
     elif args.renderer == 'nvr+':
-        renderer = NVR_Renderer()
+        renderer = NVR_Renderer(device)
         renderer.model.to(args.device)
     net = nn.DataParallel(net)
 

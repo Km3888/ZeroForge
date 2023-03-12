@@ -6,10 +6,10 @@ import numpy as np
 
 class NVR_Renderer:
     
-    def __init__(self):
+    def __init__(self,device):
         self.model = NVR_Plus()
-        self.model.load_state_dict(torch.load('/scratch/mp5847/general_clip_forge/nvr_plus.pt'))
-        self.model.to('cuda:0') #TODO make device arbitrary
+        self.model.load_state_dict(torch.load('rendering/nvr_torch/nvr_plus.pt',map_location=device))
+        self.model.to(device)
         self.model.eval()
     
     def render(self,voxels,orthogonal=False):
@@ -29,8 +29,8 @@ class NVR_Renderer:
         if orthogonal:
             assert batch_size ==3
             rotations_1 = np.random.uniform(0,360,size=(batch_size,3))
-            rotations_2 = rotations_1 + np.array([0,0,90]).expand_dims(0)
-            rotations_3 = rotations_1 + np.array([0,90,0]).expand_dims(0)
+            rotations_2 = rotations_1 + np.expand_dims(np.array([0,0,90]),0)
+            rotations_3 = rotations_1 + np.expand_dims(np.array([0,90,0]),0)
             rotations = np.concatenate([rotations_1,rotations_2,rotations_3],axis=0)
 
         
