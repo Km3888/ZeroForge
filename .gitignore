@@ -71,3 +71,6 @@ git.txt
 rendering/nvr_torch/nvr_plus.pt
 fetch_tensorboard.sh
 forge_losses.sh
+tb_to_csv.py
+test_forge.sh
+all_forge_losses.sh

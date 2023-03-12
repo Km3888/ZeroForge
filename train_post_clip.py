@@ -252,7 +252,7 @@ def get_local_parser(mode="args"):
     parser.add_argument("--seed_nf",  type=int, default=1, metavar='N', help='add or remove')
     parser.add_argument("--images_type",  type=str, default=None, help='img_choy13 or img_custom')
     parser.add_argument("--n_px",  type=int, default=224, help='Resolution of the image')
-    
+    parser.add_argument("--autoencoder_path",type=str,default=None)
     
     if mode == "args":
         args = parser.parse_args()
@@ -313,8 +313,14 @@ def main():
     
     
     net = autoencoder.get_model(args).to(args.device)
-    checkpoint = torch.load(args.checkpoint_dir_base +"/"+ args.checkpoint +".pt", map_location=args.device)
-    net.load_state_dict(checkpoint['model'])
+    if args.train_mode == "test":
+        checkpoint = torch.load(args.autoencoder_path, map_location=args.device)
+        if "exps" in args.autoencoder_path:
+            checkpoint = checkpoint["model"]
+        net.load_state_dict(checkpoint)
+    else:
+        checkpoint = torch.load(args.checkpoint_dir_base +"/"+ args.checkpoint +".pt", map_location=args.device)
+        net.load_state_dict(checkpoint['model'])
     net.eval()
     
     if args.train_mode!="test":
@@ -335,21 +341,22 @@ def main():
     latent_flow_network = latent_flows.get_generator(args.emb_dims, args.cond_emb_dim, device, flow_type=args.flow_type, num_blocks=args.num_blocks, num_hidden=args.num_hidden)
     
     if args.train_mode == "test":
-        checkpoint_dir = args.latent_load_checkpoint
         #iterate over all files in args.latent_load_checkpoint directory that end in .pt
-        for file in os.listdir(checkpoint_dir):
-            if file.endswith(".pt"):
-                checkpoint = torch.load(checkpoint_dir + "/" + file, map_location=args.device)
-                latent_flow_network.load_state_dict(checkpoint['model'])
-                val_loss = val_one_epoch(args, latent_flow_network, val_dataloader_new,  0)
-                #open clip_forge.txt and write the val loss along with the filename on a new line
-                with open(checkpoint_dir + "/clip_forge_losses.txt", "a") as f:
-                    f.write(file + ":" + str(val_loss)+"\n")
+        checkpoint = torch.load(args.latent_load_checkpoint, map_location=args.device)
+        if "exps" in args.latent_load_checkpoint:
+            checkpoint = checkpoint['model']
+        latent_flow_network.load_state_dict(checkpoint)
+        val_loss = val_one_epoch(args, latent_flow_network, val_dataloader_new,  0)
+        #open clip_forge.txt and write the val loss along with the filename on a new line
+        checkpoint_dir = '/'.join(args.latent_load_checkpoint.split('/')[:-1])
+        with open(checkpoint_dir + "/clip_forge_losses.txt", "a") as f:
+            f.write(args.latent_load_checkpoint.split('/')[-1] + ":" + str(val_loss)+"\n")
         import sys
         sys.exit(0)   
         checkpoint = torch.load(checkpoint_dir, map_location=args.device)
         latent_flow_network.load_state_dict(checkpoint['model'])
         val_loss = val_one_epoch(args, latent_flow_network, val_dataloader_new,  0)
+        
         
     else: 
         optimizer = torch.optim.Adam(latent_flow_network.parameters(), lr=0.00003)

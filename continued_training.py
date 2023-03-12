@@ -296,21 +296,9 @@ def main(args):
     # if not os.path.exists(f'out_3d/{args.learning_rate}_{args.query_array}'):
     #     os.mkdir(f'out_3d/{args.learning_rate}_{args.query_array}')
 
-    device, gpu_array = helper.get_device(args)
-    args.device = device
-    
-    print("Using device: ", device)
-    args, clip_model = get_clip_model(args)
-    
-    net = autoencoder.EncoderWrapper(args).to(args.device)
-
-    if not args.uninitialized:
-        checkpoint = torch.load(args.checkpoint_dir_base +"/"+ args.checkpoint +".pt", map_location=args.device)
-        net.load_state_dict(checkpoint['model'])
-        net.eval()
-    #print the value for every input of the latent flow network
-
-    latent_flow_network = latent_flows.get_generator(args.emb_dims, args.cond_emb_dim, device, flow_type=args.flow_type, num_blocks=args.num_blocks, num_hidden=args.num_hidden)
+def get_networks(args):
+    net = autoencoder.EncoderWrapper(args).to(args.device)    
+    latent_flow_network = latent_flows.get_generator(args.emb_dims, args.cond_emb_dim, args.device, flow_type=args.flow_type, num_blocks=args.num_blocks, num_hidden=args.num_hidden)
     if not args.uninitialized:
         print(args.checkpoint_dir_prior)
         print(args.checkpoint)
@@ -318,6 +306,27 @@ def main(args):
         checkpoint_nf_path = os.path.join(args.checkpoint_dir_prior,  args.checkpoint_nf +".pt")
         checkpoint = torch.load(checkpoint_nf_path, map_location=args.device)
         latent_flow_network.load_state_dict(checkpoint['model'])
+        checkpoint = torch.load(args.checkpoint_dir_base +"/"+ args.checkpoint +".pt", map_location=args.device)
+        net.load_state_dict(checkpoint['model'])
+        net.eval()
+    return net, latent_flow_network
+
+def main(args):
+    if args.use_tensorboard:
+        tensorboard_comment = '_%s_lr=%s_beta=%s_gpu=%s_baseline=%s_v=%s_k=%s_r=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized,args.num_voxels,args.num_views,args.renderer)
+        if args.switch_point is not None:
+            tensorboard_comment += '_s=%s' % args.switch_point
+        if args.orthogonal:
+            tensorboard_comment += '_orthogonal'
+        args.writer=SummaryWriter(comment=tensorboard_comment)
+    assert args.renderer in ['ea','nvr+']
+    device, gpu_array = helper.get_device(args)
+    args.device = device
+    
+    print("Using device: ", device)
+    args, clip_model = get_clip_model(args) 
+    
+    net,latent_flow_network = get_networks(args)
     
     param_dict={'device':args.device,'cube_len':args.num_voxels}
     if args.renderer == 'ea' or args.switch_point is not None:
@@ -334,6 +343,7 @@ query_arrays = {
                 "spoon": ["spoon"],
                 "fork": ["fork"],
                 "hammer": ["hammer"],
+                "four": ["spoon","fork","wineglass","knife","wineglass"],
                 "six": ['wineglass','spoon','fork','knife','screwdriver','hammer'],
                 "nine": ['wineglass','spoon','fork','knife','screwdriver','hammer',"soccer ball", "football","plate"],
                 "fourteen": ["wineglass','spoon','fork','knife','screwdriver','hammer","pencil","screw","plate","mushroom","umbrella","thimble","sombrero","sandal"]
