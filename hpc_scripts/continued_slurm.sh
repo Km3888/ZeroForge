@@ -17,6 +17,8 @@ module purge
 SINGULARITY_IMAGE=/scratch/work/public/singularity/cuda11.2.2-cudnn8-devel-ubuntu20.04.sif
 OVERLAY_FILE=/scratch/km3888/singularity_forge/3d.ext3:ro
 
+cd ../
+
 singularity exec --nv --overlay $OVERLAY_FILE $SINGULARITY_IMAGE /bin/bash \
 -c "source /ext3/miniconda3/bin/activate;\
 python continued_training.py --num_voxels 128 --learning_rate 01e-05 \
