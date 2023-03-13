@@ -28,7 +28,7 @@ def make_writer(args):
     if args.orthogonal:
         tensorboard_comment += '_orthogonal'
     if args.slurm_id is not None:
-        tensorboard_comment += str(args.slurm_id)
+        tensorboard_comment = str(args.slurm_id) + "/" + tensorboard_comment
     tensorboard_comment += 'amp'
     assert args.renderer in ['ea','nvr+']
     return SummaryWriter(comment=tensorboard_comment)
