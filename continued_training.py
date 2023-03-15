@@ -90,17 +90,17 @@ def do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model
     else:
         hard_loss = -1*torch.cosine_similarity(text_features,hard_im_embeddings).mean()
     #write to tensorboard
-    voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,iter)
+    voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,iter,query_array)
     if args.use_tensorboard:
         args.writer.add_scalar('Loss/hard_loss', hard_loss, iter)
         args.writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
 
-def evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,i):
+def evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,i,query_array):
     # code for saving the "true" voxel image
     voxel_ims=[]
     num_shapes = out_3d_hard.shape[0]
-    if len(set(args.query_array))==1:
-        num_shapes = min(num_shapes, 3)
+    n_unique = len(set(query_array))
+    num_shapes = min([n_unique, 3])
     for shape in range(num_shapes):
         save_path = '/scratch/km3888/queries/%s/sample_%s_%s.png' % (args.writer.log_dir[5:],i,shape)
         voxel_save(out_3d_hard[shape].squeeze().detach().cpu(), None, out_file=save_path)
@@ -122,7 +122,7 @@ def evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,i):
     voxel_tensor = T.Resize((224,224))(voxel_ims)
     # get CLIP embedding
     voxel_image_embedding = visual_model(voxel_tensor.to(args.device).type(visual_model_type))
-    voxel_similarity = torch.cosine_similarity(text_features, voxel_image_embedding).mean()
+    voxel_similarity = torch.cosine_similarity(text_features[:num_shapes], voxel_image_embedding).mean()
     return voxel_similarity
 
 def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):    
@@ -135,8 +135,7 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         query_array = query_arrays[args.query_array]
     else:
         query_array = [args.query_array]
-    if len(query_array) ==1:
-        query_array = query_array*args.num_views
+    query_array = query_array*args.num_views
     text_features = get_text_embeddings(args,clip_model,query_array).detach()
     # make directory for saving images with name of the text query using os.makedirs
     if not os.path.exists('/scratch/km3888/queries/%s' % args.writer.log_dir[5:]):
@@ -166,7 +165,7 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         if not iter%300:
             with torch.cuda.amp.autocast():
                 do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features)
-        
+
         if not (iter%5000) and iter!=0:
             #save encoder and latent flow network
             torch.save(latent_flow_model.state_dict(), '/scratch/km3888/queries/%s/flow_model_%s.pt' % (args.writer.log_dir[5:],iter))
@@ -177,7 +176,6 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         
         with torch.cuda.amp.autocast():
             loss = clip_loss(args,query_array,visual_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features)        
-        
         loss.backward()
         losses.append(loss.item())
         

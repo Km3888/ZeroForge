@@ -13,7 +13,8 @@ query_arrays = {
                 "spoon": ["spoon"],
                 "fork": ["fork"],
                 "hammer": ["hammer"],
-                "four": ["spoon","fork","wineglass","knife","wineglass"],
+                "three": ["spoon","fork","knife"],
+                "four": ["spoon","fork","wineglass","knife"],
                 "six": ['wineglass','spoon','fork','knife','screwdriver','hammer'],
                 "nine": ['wineglass','spoon','fork','knife','screwdriver','hammer',"soccer ball", "football","plate"],
                 "fourteen": ["wineglass','spoon','fork','knife','screwdriver','hammer","pencil","screw","plate","mushroom","umbrella","thimble","sombrero","sandal"]
