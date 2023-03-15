@@ -31,8 +31,9 @@ def make_writer(args):
     if args.slurm_id is not None:
         tensorboard_comment = str(args.slurm_id) + "/" + tensorboard_comment
     tensorboard_comment += 'amp'
+    log_dir = '/scratch/km3888/clip_forge_runs/' + tensorboard_comment
     assert args.renderer in ['ea','nvr+']
-    return SummaryWriter(comment=tensorboard_comment)
+    return SummaryWriter(log_dir=log_dir)
 
 def get_networks(args):
     net = autoencoder.EncoderWrapper(args).to(args.device)    
