@@ -102,7 +102,7 @@ def evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,i):
     if len(set(args.query_array))==1:
         num_shapes = min(num_shapes, 3)
     for shape in range(num_shapes):
-        save_path = '/scratch/km3888/queries/%s/sample_%s_%s.png' % (args.writer.log_dir[5:],i,shape)
+        save_path = '/scratch/km3888/queries/%s/sample_%s_%s.png' % (args.id,i,shape)
         voxel_save(out_3d_hard[shape].squeeze().detach().cpu(), None, out_file=save_path)
         # load the image that was saved and transform it to a tensor
         voxel_im = PIL.Image.open(save_path).convert('RGB')
@@ -113,7 +113,7 @@ def evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,i):
     grid = torchvision.utils.make_grid(voxel_ims, nrow=num_shapes)
 
     for shape in range(num_shapes):
-        save_path = '/scratch/km3888/queries/%s/sample_%s_%s.png' % (args.writer.log_dir[5:],i,shape)
+        save_path = '/scratch/km3888/queries/%s/sample_%s_%s.png' % (args.id,i,shape)
         os.remove(save_path)
 
     if args.use_tensorboard:
@@ -139,8 +139,8 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         query_array = query_array*args.num_views
     text_features = get_text_embeddings(args,clip_model,query_array).detach()
     # make directory for saving images with name of the text query using os.makedirs
-    if not os.path.exists('/scratch/km3888/queries/%s' % args.writer.log_dir[5:]):
-        os.makedirs('/scratch/km3888/queries/%s' % args.writer.log_dir[5:])
+    if not os.path.exists('/scratch/km3888/queries/%s' % args.id):
+        os.makedirs('/scratch/km3888/queries/%s' % args.id)
 
     #remove text components from clip and free up memory
     visual_model = clip_model.visual
@@ -169,8 +169,8 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         
         if not (iter%5000) and iter!=0:
             #save encoder and latent flow network
-            torch.save(latent_flow_model.state_dict(), '/scratch/km3888/queries/%s/flow_model_%s.pt' % (args.writer.log_dir[5:],iter))
-            torch.save(autoencoder.module.encoder.state_dict(), '/scratch/km3888/queries/%s/aencoder_%s.pt' % (args.writer.log_dir[5:],iter))
+            torch.save(latent_flow_model.state_dict(), '/scratch/km3888/queries/%s/flow_model_%s.pt' % (args.id,iter))
+            torch.save(autoencoder.module.encoder.state_dict(), '/scratch/km3888/queries/%s/aencoder_%s.pt' % (args.id,iter))
             
         flow_optimizer.zero_grad()
         net_optimizer.zero_grad()
@@ -190,15 +190,16 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
             print('finished first iter')
     
     #save latent flow and AE networks
-    torch.save(latent_flow_model.state_dict(), '/scratch/km3888/queries/%s/final_flow_model.pt' % args.writer.log_dir[5:])
-    torch.save(autoencoder.module.encoder.state_dict(), '/scratch/km3888/queries/%s/final_aencoder.pt' % args.writer.log_dir[5:])
+    torch.save(latent_flow_model.state_dict(), '/scratch/km3888/queries/%s/final_flow_model.pt' % args.id)
+    torch.save(autoencoder.module.encoder.state_dict(), '/scratch/km3888/queries/%s/final_aencoder.pt' % args.id)
     
     print(losses)
 
 
 def main(args):
     args.writer = make_writer(args)
-
+    args.id = args.writer.log_dir.split('runs/')[-1]
+    
     device, gpu_array = helper.get_device(args)
     args.device = device
     
