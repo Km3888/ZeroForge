@@ -1,6 +1,7 @@
 import argparse
 import numpy as np
 import torch
+import torch.nn as nn
 import tensorflow as tf
 import matplotlib.pyplot as plt
 
@@ -44,7 +45,7 @@ if True:
     BLENDER_SCALE = 2
     DIAMETER = 4.2  # The voxel area in world coordinates
     
-    device = 'cuda:0'
+    # device = 'cuda:0'
 
 def process_voxel(voxel):
     voxel = voxel.detach().cpu().numpy()
@@ -162,7 +163,7 @@ def diff_object_to_world(voxels,
     sampling_points = tf.cast(sampling_points, tf.float32)
 
     #okay now we care about differentiability so convert to PyTorch and put on GPU
-    sampling_points = torch.from_numpy(sampling_points.numpy()).to(device)
+    sampling_points = torch.from_numpy(sampling_points.numpy()).to(voxels.device)
 
     sampling_points = sampling_points.view(-1,128,128,128,3)
     sampling_points = sampling_points.expand(voxels.shape[0],-1,-1,-1,-1)
@@ -178,8 +179,8 @@ def diff_estimate_ground_image(object_voxels,angle):
         euler_angles_y,translation_vector = make_arrays(angle)
         
     #convert arrays to pytorch and put them on cuda:0
-    ground_occupancy = torch.from_numpy(ground_occupancy).to(device)
-    ground_voxel_color = torch.from_numpy(ground_voxel_color).to(device)
+    ground_occupancy = torch.from_numpy(ground_occupancy).to(object_voxels.device)
+    ground_voxel_color = torch.from_numpy(ground_voxel_color).to(object_voxels.device)
     scene_voxels = object_voxels*(1-ground_occupancy) + \
                     ground_voxel_color*ground_occupancy
     
@@ -234,7 +235,7 @@ def diff_render_voxels_from_blender_camera(voxels,
     # Adjust the camera (translate the camera instead of the object)
     sampling_volume = sampling_volume - object_translation
     sampling_volume = sampling_volume/helpers.CUBE_BOX_DIM
-    sampling_tensor = torch.from_numpy(sampling_volume.numpy()).to(device)
+    sampling_tensor = torch.from_numpy(sampling_volume.numpy()).to(voxels.device)
     sampling_tensor = sampling_tensor.view(-1,128,128,128,3)
     
     interpolated_voxels = interpolated_voxels.permute(0,4,1,2,3)
@@ -291,7 +292,7 @@ def diff_transform_volume(voxels, transformation_matrix,voxel_size = (128,128,12
     volume_sampling = tf.cast(tf.linalg.matrix_transpose(volume_sampling),
                                 tf.float32)
     permuted_voxels = voxels.permute(0,4,1,2,3)
-    sampling_tensor = torch.tensor(volume_sampling.numpy(),dtype=torch.float32).to(device)
+    sampling_tensor = torch.tensor(volume_sampling.numpy(),dtype=torch.float32).to(voxels.device)
     sampling_tensor = sampling_tensor.view(-1,128,128,128,3)
     sampling_tensor = sampling_tensor.expand(voxels.shape[0],-1,-1,-1,-1)
 
@@ -300,6 +301,7 @@ def diff_transform_volume(voxels, transformation_matrix,voxel_size = (128,128,12
     return output
 
 def diff_preprocess(object_voxels,rotation_angles):
+    print('shapes:',object_voxels.shape,rotation_angles.shape)
     object_voxels = diff_load_voxel(object_voxels)
     interpolated_voxels = diff_estimate_ground_image(object_voxels,rotation_angles)
 
@@ -309,8 +311,8 @@ def diff_preprocess(object_voxels,rotation_angles):
                             camera_translation_vector[:, :, 0],
                             GROUND_COLOR)
     
-    ground_image = torch.tensor(ground_image.numpy(),dtype=torch.float32).to(device)
-    ground_alpha = torch.tensor(ground_alpha.numpy(),dtype=torch.float32).to(device)
+    ground_image = torch.tensor(ground_image.numpy(),dtype=torch.float32).to(object_voxels.device)
+    ground_alpha = torch.tensor(ground_alpha.numpy(),dtype=torch.float32).to(object_voxels.device)
     ground_image = ground_image.permute(0,3,1,2)
     ground_alpha = ground_alpha.permute(0,3,1,2)
     
@@ -349,7 +351,34 @@ def diff_preprocess(object_voxels,rotation_angles):
                     ground_image*(1-rerendering_alpha)*ground_alpha + \
                     rerendering_image*rerendering_alpha
                     
-    return final_composite,interpolated_voxels
+    return final_composite.to(object_voxels.device),interpolated_voxels.to(object_voxels.device)
+
+class Preprocessor(nn.Module):
+    
+    def __init__(self):
+        super(Preprocessor, self).__init__()
+        
+    def forward(self,voxels,orthogonal):
+        print('module:',voxels.device)
+        batch_size=voxels.shape[0]
+        rotation_x = -np.deg2rad(np.random.uniform(0,360,size=(batch_size,1))).astype(np.float32)
+        rotation_y = -np.deg2rad(np.random.uniform(0,360,size=(batch_size,1))).astype(np.float32)
+        rotation_z = -np.deg2rad(np.random.uniform(0,360,size=(batch_size,1))).astype(np.float32)
+
+        rotation_angles = np.concatenate([rotation_x,rotation_y,rotation_z],axis=1)
+
+
+        if orthogonal:
+            assert batch_size ==3
+            rotations_1 = np.random.uniform(0,360,size=(batch_size,3))
+            rotations_2 = rotations_1 + np.expand_dims(np.array([0,0,90]),0)
+            rotations_3 = rotations_1 + np.expand_dims(np.array([0,90,0]),0)
+            rotations = np.concatenate([rotations_1,rotations_2,rotations_3],axis=0)
+            
+        final_composite, interpolated_voxels = diff_preprocess(voxels,rotation_angles)
+        
+        return final_composite,interpolated_voxels
+        
 
 def save_output(output, path):
     view = 0 #@param {type:"slider", min:0, max:9, step:1}

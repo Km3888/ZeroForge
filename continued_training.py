@@ -37,7 +37,7 @@ def clip_loss(args,query_array,visual_model,autoencoder,latent_flow_model,render
     out_3d = gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features)
     out_3d_soft = torch.sigmoid(args.beta*(out_3d-args.threshold))#.clone()
     
-    ims = renderer.render(out_3d_soft,orthogonal=args.orthogonal).double()
+    ims = renderer(out_3d_soft,orthogonal=args.orthogonal).double()
     ims = resizer(ims)
 
     im_embs=visual_model(ims.type(visual_model_type))
@@ -74,13 +74,16 @@ def gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features):
     return out_3d
 
 def do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features):
+    # import pdb; pdb.set_trace()
+    # with torch.no_grad():
     out_3d = gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features)
     #save out_3d to numpy file
     # with open(f'out_3d/{args.learning_rate}_{args.query_array}/out_3d_{iter}.npy', 'wb') as f:
     #     np.save(f, out_3d.cpu().detach().numpy())
     out_3d_hard = out_3d.detach() > args.threshold
     # rgbs_hard = renderer.render(out_3d_hard.float(),orthogonal=args.orthogonal).double().to(args.device)
-    rgbs_hard = renderer.render(out_3d_hard.float(),orthogonal=args.orthogonal).to(args.device)
+    # import pdb; pdb.set_trace()
+    rgbs_hard = renderer(out_3d_hard.float(),orthogonal=args.orthogonal).to(args.device)
     rgbs_hard = resizer(rgbs_hard)
     # hard_im_embeddings = clip_model.encode_image(rgbs_hard)
     hard_im_embeddings = visual_model(rgbs_hard.type(visual_model_type))
@@ -99,6 +102,7 @@ def evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,i,query_arra
     # code for saving the "true" voxel image
     voxel_ims=[]
     num_shapes = out_3d_hard.shape[0]
+    import pdb; pdb.set_trace()
     n_unique = len(set(query_array))
     num_shapes = min([n_unique, 3])
     for shape in range(num_shapes):
@@ -165,6 +169,9 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         if not iter%300:
             with torch.cuda.amp.autocast():
                 do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features)
+                import pdb;pdb.set_trace()
+            if iter==0:
+                print('finished first eval')
 
         if not (iter%5000) and iter!=0:
             #save encoder and latent flow network
@@ -211,7 +218,9 @@ def main(args):
         renderer=BaselineRenderer('absorption_only',param_dict)
     elif args.renderer == 'nvr+':
         renderer = NVR_Renderer(device)
-        renderer.model.to(args.device)
+        renderer = nn.DataParallel(renderer)
+        renderer.to(args.device)
+        # renderer.preprocessor = nn.DataParallel(renderer.preprocessor)
     net = nn.DataParallel(net)
 
     test_train(args,clip_model,net,latent_flow_network,renderer)
