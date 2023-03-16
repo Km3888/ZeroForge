@@ -93,10 +93,12 @@ def do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model
     else:
         hard_loss = -1*torch.cosine_similarity(text_features,hard_im_embeddings).mean()
     #write to tensorboard
-    voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,iter,query_array)
+    # voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,iter,query_array)
     if args.use_tensorboard:
         args.writer.add_scalar('Loss/hard_loss', hard_loss, iter)
-        args.writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
+        # args.writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
+    del rgbs_hard 
+    torch.cuda.empty_cache()
 
 def evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,i,query_array):
     # code for saving the "true" voxel image
@@ -166,13 +168,11 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
             renderer = NVR_Renderer(args.device)
             renderer.model.to(args.device)
 
-        if not iter%300:
+        import pdb; pdb.set_trace()
+        if not iter%1000:
             with torch.cuda.amp.autocast():
                 do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features)
-                import pdb;pdb.set_trace()
-            if iter==0:
-                print('finished first eval')
-
+        
         if not (iter%5000) and iter!=0:
             #save encoder and latent flow network
             torch.save(latent_flow_model.state_dict(), '/scratch/km3888/queries/%s/flow_model_%s.pt' % (args.id,iter))
@@ -181,6 +181,7 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         flow_optimizer.zero_grad()
         net_optimizer.zero_grad()
         
+        import pdb; pdb.set_trace()
         with torch.cuda.amp.autocast():
             loss = clip_loss(args,query_array,visual_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features)        
         loss.backward()
