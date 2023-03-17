@@ -2,6 +2,7 @@ import os
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:512"
 import os.path as osp
 import logging
+import gc
 
 import torch
 import torch.optim as optim
@@ -97,7 +98,16 @@ def do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model
     if args.use_tensorboard:
         args.writer.add_scalar('Loss/hard_loss', hard_loss, iter)
         # args.writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
-    del rgbs_hard 
+
+    rgbs_hard.to("cpu")
+    out_3d_hard.to("cpu")
+    out_3d.to("cpu")
+    hard_loss.to("cpu")
+    del rgbs_hard
+    del out_3d_hard
+    del out_3d
+    del hard_loss
+    gc.collect()
     torch.cuda.empty_cache()
 
 def evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,i,query_array):
