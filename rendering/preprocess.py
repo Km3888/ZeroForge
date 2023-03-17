@@ -292,7 +292,7 @@ def diff_transform_volume(voxels, transformation_matrix,voxel_size = (128,128,12
     volume_sampling = tf.cast(tf.linalg.matrix_transpose(volume_sampling),
                                 tf.float32)
     permuted_voxels = voxels.permute(0,4,1,2,3)
-    sampling_tensor = torch.tensor(volume_sampling.numpy(),dtype=torch.float32).to(voxels.device)
+    sampling_tensor = torch.tensor(volume_sampling.numpy(),dtype=voxels.dtype).to(voxels.device)
     sampling_tensor = sampling_tensor.view(-1,128,128,128,3)
     sampling_tensor = sampling_tensor.expand(voxels.shape[0],-1,-1,-1,-1)
 

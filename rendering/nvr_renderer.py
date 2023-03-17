@@ -38,6 +38,8 @@ class NVR_Renderer(nn.Module):
         final_composite = (final_composite - 0.5)*2
         interpolated_voxels = interpolated_voxels.permute(0,4,1,2,3)
 
-        # self.model = self.model.to(voxels.device)
+        # # self.model = self.model.to(voxels.device)
+        print(final_composite.device,interpolated_voxels.device,light_position.device)
         output=self.model(interpolated_voxels,final_composite,light_position)
         return output*0.5+0.5
+        return final_composite
