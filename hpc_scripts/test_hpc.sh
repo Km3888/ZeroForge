@@ -24,7 +24,5 @@ singularity exec --nv --overlay $OVERLAY_FILE $SINGULARITY_IMAGE /bin/bash \
 export 'PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512';\
 python continued_training.py --num_voxels 128 --learning_rate 01e-05 \
 --gpu 0 --beta 150.0 --query_array "airplane" --num_views 8 \
---checkpoint_dir_base ./exps/models/autoencoder \
---checkpoint best_iou --checkpoint_dir_prior \
-./exps/models/prior/ --checkpoint_nf best --renderer nvr+ \
+--init og_init --renderer nvr+ \
 "
