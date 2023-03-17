@@ -35,7 +35,7 @@ class NVR_Plus(nn.Module):
         projection_representation = self.projection_processing(voxel_representation)
         light_code = self.light_processing(light_position)
 
-        print(projection_representation.device,light_code.device,set([x.device for x in list(self.merger.buffers())[0]]))
+        # print(projection_representation.device,light_code.device,set([x.device for x in list(self.merger.buffers())[0]]))
         latent_code = self.merger(projection_representation,light_code)
         rendered_image = self.decoder(latent_code)
         composite = self.image_processing(final_composite)
