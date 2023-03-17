@@ -89,11 +89,20 @@ def do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model
         hard_loss = -1*torch.cosine_similarity(text_features.unsqueeze(1).expand(-1,3,-1).reshape(-1,512),hard_im_embeddings).mean()
     else:
         hard_loss = -1*torch.cosine_similarity(text_features,hard_im_embeddings).mean()
+
     #write to tensorboard
     voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,iter,query_array)
     if args.use_tensorboard:
         args.writer.add_scalar('Loss/hard_loss', hard_loss, iter)
         args.writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
+
+    # delete useless variables after moving to CPU
+    out_3d = out_3d.cpu()
+    out_3d_hard = out_3d_hard.cpu()
+    rgbs_hard = rgbs_hard.cpu()
+    hard_im_embeddings = hard_im_embeddings.cpu()
+    hard_loss = hard_loss.cpu()
+    del out_3d_hard, rgbs_hard, hard_im_embeddings, out_3d, hard_loss
 
 def evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,i,query_array):
     # code for saving the "true" voxel image
@@ -165,7 +174,6 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         if not iter%300:
             with torch.cuda.amp.autocast():
                 do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features)
-
         if not (iter%5000) and iter!=0:
             #save encoder and latent flow network
             torch.save(latent_flow_model.state_dict(), '/scratch/km3888/queries/%s/flow_model_%s.pt' % (args.id,iter))
