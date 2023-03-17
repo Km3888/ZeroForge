@@ -32,7 +32,7 @@ import sys
 import numpy as np
 import torch.nn as nn
 
-from continued_utils import query_arrays, make_writer, get_networks, get_local_parser, get_clip_model,get_text_embeddings,get_type
+from continued_utils import query_arrays, make_writer, get_networks, get_local_parser, get_clip_model,get_text_embeddings,get_type,make_init_dict
 
 def clip_loss(args,query_array,visual_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features):
     out_3d = gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features)
@@ -75,15 +75,12 @@ def gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features):
     return out_3d
 
 def do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features):
-    # import pdb; pdb.set_trace()
-    # with torch.no_grad():
     out_3d = gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features)
     #save out_3d to numpy file
     # with open(f'out_3d/{args.learning_rate}_{args.query_array}/out_3d_{iter}.npy', 'wb') as f:
     #     np.save(f, out_3d.cpu().detach().numpy())
     out_3d_hard = out_3d.detach() > args.threshold
     # rgbs_hard = renderer.render(out_3d_hard.float(),orthogonal=args.orthogonal).double().to(args.device)
-    # import pdb; pdb.set_trace()
     rgbs_hard = renderer(out_3d_hard.float(),orthogonal=args.orthogonal).to(args.device)
     rgbs_hard = resizer(rgbs_hard)
     # hard_im_embeddings = clip_model.encode_image(rgbs_hard)
@@ -94,10 +91,10 @@ def do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model
     else:
         hard_loss = -1*torch.cosine_similarity(text_features,hard_im_embeddings).mean()
     #write to tensorboard
-    # voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,iter,query_array)
+    voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,iter,query_array)
     if args.use_tensorboard:
         args.writer.add_scalar('Loss/hard_loss', hard_loss, iter)
-        # args.writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
+        args.writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
 
     rgbs_hard.to("cpu")
     out_3d_hard.to("cpu")
@@ -114,7 +111,6 @@ def evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,i,query_arra
     # code for saving the "true" voxel image
     voxel_ims=[]
     num_shapes = out_3d_hard.shape[0]
-    import pdb; pdb.set_trace()
     n_unique = len(set(query_array))
     num_shapes = min([n_unique, 3])
     for shape in range(num_shapes):
@@ -128,9 +124,9 @@ def evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,i,query_arra
     voxel_ims = torch.cat(voxel_ims,0)
     grid = torchvision.utils.make_grid(voxel_ims, nrow=num_shapes)
 
-    for shape in range(num_shapes):
-        save_path = '/scratch/km3888/queries/%s/sample_%s_%s.png' % (args.id,i,shape)
-        os.remove(save_path)
+    # for shape in range(num_shapes):
+    #     save_path = '/scratch/km3888/queries/%s/sample_%s_%s.png' % (args.id,i,shape)
+    #     os.remove(save_path)
 
     if args.use_tensorboard:
         args.writer.add_image('voxel image', grid, i)
@@ -222,7 +218,8 @@ def main(args):
     print("Using device: ", device)
     args, clip_model = get_clip_model(args) 
     
-    net,latent_flow_network = get_networks(args)
+    init_dict = make_init_dict()[args.init]
+    net,latent_flow_network = get_networks(args,init_dict)
     
     param_dict={'device':args.device,'cube_len':args.num_voxels}
     if args.renderer == 'ea' or args.switch_point is not None:
