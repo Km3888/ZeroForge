@@ -2,6 +2,7 @@ import os
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:512"
 import os.path as osp
 import logging
+import gc
 
 import torch
 import torch.optim as optim
@@ -31,13 +32,13 @@ import sys
 import numpy as np
 import torch.nn as nn
 
-from continued_utils import query_arrays, make_writer, get_networks, get_local_parser, get_clip_model,get_text_embeddings,get_type
+from continued_utils import query_arrays, make_writer, get_networks, get_local_parser, get_clip_model,get_text_embeddings,get_type,make_init_dict
 
 def clip_loss(args,query_array,visual_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features):
     out_3d = gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features)
     out_3d_soft = torch.sigmoid(args.beta*(out_3d-args.threshold))#.clone()
     
-    ims = renderer.render(out_3d_soft,orthogonal=args.orthogonal).double()
+    ims = renderer(out_3d_soft,orthogonal=args.orthogonal).double()
     ims = resizer(ims)
 
     im_embs=visual_model(ims.type(visual_model_type))
@@ -80,7 +81,7 @@ def do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model
     #     np.save(f, out_3d.cpu().detach().numpy())
     out_3d_hard = out_3d.detach() > args.threshold
     # rgbs_hard = renderer.render(out_3d_hard.float(),orthogonal=args.orthogonal).double().to(args.device)
-    rgbs_hard = renderer.render(out_3d_hard.float(),orthogonal=args.orthogonal).to(args.device)
+    rgbs_hard = renderer(out_3d_hard.float(),orthogonal=args.orthogonal).to(args.device)
     rgbs_hard = resizer(rgbs_hard)
     # hard_im_embeddings = clip_model.encode_image(rgbs_hard)
     hard_im_embeddings = visual_model(rgbs_hard.type(visual_model_type))
@@ -96,13 +97,16 @@ def do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model
         args.writer.add_scalar('Loss/hard_loss', hard_loss, iter)
         args.writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
 
-    # delete useless variables after moving to CPU
-    out_3d = out_3d.cpu()
-    out_3d_hard = out_3d_hard.cpu()
-    rgbs_hard = rgbs_hard.cpu()
-    hard_im_embeddings = hard_im_embeddings.cpu()
-    hard_loss = hard_loss.cpu()
-    del out_3d_hard, rgbs_hard, hard_im_embeddings, out_3d, hard_loss
+    rgbs_hard.to("cpu")
+    out_3d_hard.to("cpu")
+    out_3d.to("cpu")
+    hard_loss.to("cpu")
+    del rgbs_hard
+    del out_3d_hard
+    del out_3d
+    del hard_loss
+    gc.collect()
+    torch.cuda.empty_cache()
 
 def evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,i,query_array):
     # code for saving the "true" voxel image
@@ -121,9 +125,9 @@ def evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,i,query_arra
     voxel_ims = torch.cat(voxel_ims,0)
     grid = torchvision.utils.make_grid(voxel_ims, nrow=num_shapes)
 
-    for shape in range(num_shapes):
-        save_path = '/scratch/km3888/queries/%s/sample_%s_%s.png' % (args.id,i,shape)
-        os.remove(save_path)
+    # for shape in range(num_shapes):
+    #     save_path = '/scratch/km3888/queries/%s/sample_%s_%s.png' % (args.id,i,shape)
+    #     os.remove(save_path)
 
     if args.use_tensorboard:
         args.writer.add_image('voxel image', grid, i)
@@ -171,9 +175,11 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
             renderer = NVR_Renderer(args.device)
             renderer.model.to(args.device)
 
-        if not iter%300:
+        # import pdb; pdb.set_trace()
+        if not iter%1000:
             with torch.cuda.amp.autocast():
                 do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features)
+        
         if not (iter%5000) and iter!=0:
             #save encoder and latent flow network
             torch.save(latent_flow_model.state_dict(), '/scratch/km3888/queries/%s/flow_model_%s.pt' % (args.id,iter))
@@ -182,10 +188,11 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         flow_optimizer.zero_grad()
         net_optimizer.zero_grad()
         
+        # import pdb; pdb.set_trace()
         with torch.cuda.amp.autocast():
             loss = clip_loss(args,query_array,visual_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features)        
         loss.backward()
-        losses.append(loss.item())
+        losses.append(loss.detach().item())
         
         if args.use_tensorboard:
             args.writer.add_scalar('Loss/train', loss.item(), iter)
@@ -212,14 +219,21 @@ def main(args):
     print("Using device: ", device)
     args, clip_model = get_clip_model(args) 
     
-    net,latent_flow_network = get_networks(args)
+    init_dict = make_init_dict()[args.init]
+    net,latent_flow_network = get_networks(args,init_dict)
     
     param_dict={'device':args.device,'cube_len':args.num_voxels}
     if args.renderer == 'ea' or args.switch_point is not None:
         renderer=BaselineRenderer('absorption_only',param_dict)
     elif args.renderer == 'nvr+':
         renderer = NVR_Renderer(device)
+        renderer = renderer.to(args.device)
         renderer.model.to(args.device)
+        print("OG LENGTH")
+        print(len(list(renderer.model.merger.parameters())))
+        renderer = nn.DataParallel(renderer)
+        import pdb; pdb.set_trace()
+        # renderer.preprocessor = nn.DataParallel(renderer.preprocessor)
     net = nn.DataParallel(net)
 
     test_train(args,clip_model,net,latent_flow_network,renderer)

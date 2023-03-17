@@ -1,14 +1,16 @@
 from rendering.scripts.renderer import renderer_dict
 import rendering.scripts.renderer.transform as dt
 import torch
+import torch.nn as nn
 
-class BaselineRenderer:
+class BaselineRenderer(nn.Module):
     
     def __init__(self,renderer_type,param_dict):
+        super(BaselineRenderer, self).__init__()
         self.renderer = renderer_dict[renderer_type](param=param_dict)
         self.rotation = dt.Transform(param_dict['device'])
         
-    def render(self,volume,orthogonal=False):
+    def forward(self,volume,orthogonal=False):
         outputs=[]
         rotated = self.rotation.rotate_random(volume.unsqueeze(1)).squeeze(1)
         for axis in range(1,4):

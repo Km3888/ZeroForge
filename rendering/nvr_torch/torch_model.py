@@ -24,10 +24,19 @@ class NVR_Plus(nn.Module):
         assert final_composite.max() <= 1.0
         assert final_composite.min() >= -1.0
 
+        # import pdb; pdb.set_trace()
+        light_position = light_position.to(voxels.device)
+        final_composite = final_composite.to(voxels.device)
+        
+        self.light_processing = self.light_processing.to(voxels.device)
+        self.projection_processing = self.projection_processing.to(voxels.device)
+        
         voxel_representation = self.voxel_processing(voxels)
         projection_representation = self.projection_processing(voxel_representation)
         light_code = self.light_processing(light_position)
 
+        import pdb; pdb.set_trace()
+        
         latent_code = self.merger(projection_representation,light_code)
         rendered_image = self.decoder(latent_code)
         composite = self.image_processing(final_composite)

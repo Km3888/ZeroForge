@@ -7,7 +7,6 @@ import sys
 import os
 import numpy as np
 
-
 query_arrays = {
                 "wineglass": ["wineglass"],
                 "spoon": ["spoon"],
@@ -19,11 +18,27 @@ query_arrays = {
                 "nine": ['wineglass','spoon','fork','knife','screwdriver','hammer',"soccer ball", "football","plate"],
                 "fourteen": ["wineglass','spoon','fork','knife','screwdriver','hammer","pencil","screw","plate","mushroom","umbrella","thimble","sombrero","sandal"]
 }
+def make_init_dict():
+    og_init = {"ae_path":"models/autoencoder/best_iou.pt", "flow_path":"models/prior/best.pt","num_blocks":5,"num_hidden":1024,"emb_dim":128}
+    init_1 = {"ae_path":"New__Autoencoder_Shapenet_Voxel_Implicit_128_add_noise_1/checkpoints/best_iou.pt", \
+                "flow_path":"New__Autoencoder_Shapenet_Voxel_Implicit_128_add_noise_1/Clip_Conditioned_realnvp_half_8_best_iou_1_B-32_1024_1/checkpoints/best.pt",\
+                "num_blocks":8,"num_hidden":1024,"emb_dim":128}
+    init_2 = {"ae_path":"New__Autoencoder_Shapenet_Voxel_Implicit_256_add_noise_1/checkpoints/best_iou.pt", \
+                "flow_path":"New__Autoencoder_Shapenet_Voxel_Implicit_256_add_noise_1/Clip_Conditioned_realnvp_half_8_best_iou_1_B-32_1024_1/checkpoints/best.pt",\
+                "num_blocks":8,"num_hidden":1024,"emb_dim":256}
+    init_3 = {"ae_path":"New__Autoencoder_Shapenet_Voxel_Implicit_256_add_noise_1/checkpoints/best_iou.pt", \
+                "flow_path":"New__Autoencoder_Shapenet_Voxel_Implicit_256_add_noise_1/Clip_Conditioned_realnvp_half_8_best_iou_1_B-32_2048_1/checkpoints/best.pt",\
+                "num_blocks":8,"num_hidden":2048,"emb_dim":256}
+    
+    init_dict = {"og_init":og_init,"init_1":init_1,"init_2":init_2,"init_3":init_3}
+    return init_dict
+    
 
 def make_writer(args):
     if not args.use_tensorboard:
         return None
     tensorboard_comment = 'q=%s_lr=%s_beta=%s_gpu=%s_baseline=%s_v=%s_k=%s_r=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized,args.num_voxels,args.num_views,args.renderer)
+    tensorboard_comment += "_init=%s" % args.init
     if args.switch_point is not None:
         tensorboard_comment += '_s=%s' % args.switch_point
     if args.orthogonal:
@@ -35,19 +50,26 @@ def make_writer(args):
     assert args.renderer in ['ea','nvr+']
     return SummaryWriter(log_dir=log_dir)
 
-def get_networks(args):
+def get_networks(args,init_dict):
+    args.emb_dims = init_dict["emb_dim"]
+    args.num_blocks = init_dict["num_blocks"]
+    args.num_hidden = init_dict["num_hidden"]
     net = autoencoder.EncoderWrapper(args).to(args.device)    
     latent_flow_network = latent_flows.get_generator(args.emb_dims, args.cond_emb_dim, args.device, flow_type=args.flow_type, num_blocks=args.num_blocks, num_hidden=args.num_hidden)
     if not args.uninitialized:
-        print(args.checkpoint_dir_prior)
-        print(args.checkpoint)
         sys.stdout.flush()
-        checkpoint_nf_path = os.path.join(args.checkpoint_dir_prior,  args.checkpoint_nf +".pt")
+        checkpoint_nf_path = os.path.join(args.init_base + "/" + init_dict["flow_path"])
         checkpoint = torch.load(checkpoint_nf_path, map_location=args.device)
         latent_flow_network.load_state_dict(checkpoint['model'])
-        checkpoint = torch.load(args.checkpoint_dir_base +"/"+ args.checkpoint +".pt", map_location=args.device)
+        checkpoint = torch.load(args.init_base +"/"+ init_dict["ae_path"], map_location=args.device)
         net.load_state_dict(checkpoint['model'])
         net.eval()
+        #calculate total parameters in autoencoder and latent flow
+        total_params_ae = sum(p.numel() for p in net.parameters() if p.requires_grad)
+        total_params_nf = sum(p.numel() for p in latent_flow_network.parameters() if p.requires_grad)
+        print("Total parameters in Autoencoder: %s" % total_params_ae)
+        print("Total parameters in Latent Flow: %s" % total_params_nf)
+        print("Total parameters in initialization: %s" % (total_params_ae + total_params_nf))
     return net, latent_flow_network
 
 def get_local_parser(mode="args"):
@@ -62,9 +84,6 @@ def get_local_parser(mode="args"):
     parser.add_argument("--seed_nf",  type=int, default=1, metavar='N', help='add or remove')
     parser.add_argument("--images_type",  type=str, default=None, help='img_choy13 or img_custom')
     parser.add_argument("--n_px",  type=int, default=224, help='Resolution of the image')
-    parser.add_argument("--checkpoint_dir_base", type=str, default=None)
-    parser.add_argument("--checkpoint_dir_prior", type=str, default=None)
-    parser.add_argument("--checkpoint_nf",  type=str, default="best", help='what is the checkpoint for nf')
     parser.add_argument("--text_query",  type=str, default="")
     parser.add_argument("--beta",  type=float, default=75, help='regularization coefficient')
     parser.add_argument("--learning_rate",  type=float, default=01e-06, help='learning rate') #careful, base parser has "lr" param with different default value
@@ -76,6 +95,8 @@ def get_local_parser(mode="args"):
     parser.add_argument("--switch_point",type=float, default=None, help='switch point for the renderer')
     parser.add_argument("--renderer",  type=str, default='ea')
     parser.add_argument("--orthogonal",  type=bool, default=False, help='use orthogonal views')
+    parser.add_argument("--init",  type=str, default="og_init", help='what is the initialization')
+    parser.add_argument("--init_base",  type=str, default="/scratch/km3888/inits", help='where is the initialization')
     parser.add_argument("--setting", type=int, default=None)
     parser.add_argument("--slurm_id", type=int, default=None)
     if mode == "args":

@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=2
+#SBATCH --cpus-per-task=4
 #SBATCH --time=40:00:00
 #SBATCH --mem=50GB
 #SBATCH --job-name=continue_training
@@ -10,8 +10,8 @@
 #SBATCH --mail-type=ALL
 #SBATCH --output=/home/km3888/general_clip_forge/slurm/job%A_%a.out
 #SBATCH --error=/home/km3888/general_clip_forge/slurm/job%A_%a.err
-#SBATCH --gres=gpu:a100:2
-#SBATCH --array=0-41
+#SBATCH --gres=gpu:a100:4
+#SBATCH --array=0-1
 
 module purge
 
@@ -24,14 +24,9 @@ echo "SLURM_ARRAY_JOB_ID: " $SLURM_ARRAY_JOB_ID
 echo "SLURM_ARRAY_TASK_ID: " $SLURM_ARRAY_TASK_ID
 echo ${SLURM_ARRAY_TASK_ID}
 
-cd ../
-
 singularity exec --nv --overlay $OVERLAY_FILE $SINGULARITY_IMAGE /bin/bash \
 -c "source /ext3/miniconda3/bin/activate;\
 python hpc_scripts/job_array.py --setting ${SLURM_ARRAY_TASK_ID} \
 --slurm_id ${SLURM_ARRAY_JOB_ID} \
---num_voxels 128 --gpu 0 --query_array "airplane" \
---checkpoint_dir_base ./exps/models/autoencoder \
---checkpoint best_iou --checkpoint_dir_prior \
-./exps/models/prior/ --checkpoint_nf best \
+--num_voxels 128 --gpu 0 \
 "

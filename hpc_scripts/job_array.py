@@ -2,13 +2,14 @@ import argparse
 from continued_training import get_local_parser,main
 
 
-setting_names= ['beta','learning_rate','num_views','renderer','query_array']
+setting_names= ['beta','learning_rate','num_views','renderer','query_array','init']
 
 settings = [[150],
             [01e-05],
-            [3,10],
+            [3],
             ['nvr+'],
-            ["wineglass","spoon","fork",'knife','screwdriver','hammer',"pencil","screw","plate","mushroom","umbrella","thimble","sombrero","sandal"]]
+            ["six","nine"],
+            ["og_init"]]
 
 
 num_settings = 1
