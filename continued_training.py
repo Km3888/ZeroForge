@@ -75,7 +75,6 @@ def gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features):
     return out_3d
 
 def do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features):
-    # #import pdb; pdb.set_trace()
     # with torch.no_grad():
     out_3d = gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features)
     #save out_3d to numpy file
@@ -83,7 +82,6 @@ def do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model
     #     np.save(f, out_3d.cpu().detach().numpy())
     out_3d_hard = out_3d.detach() > args.threshold
     # rgbs_hard = renderer.render(out_3d_hard.float(),orthogonal=args.orthogonal).double().to(args.device)
-    # #import pdb; pdb.set_trace()
     rgbs_hard = renderer(out_3d_hard.float(),orthogonal=args.orthogonal).to(args.device)
     rgbs_hard = resizer(rgbs_hard)
     # hard_im_embeddings = clip_model.encode_image(rgbs_hard)
@@ -114,7 +112,6 @@ def evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,i,query_arra
     # code for saving the "true" voxel image
     voxel_ims=[]
     num_shapes = out_3d_hard.shape[0]
-    #import pdb; pdb.set_trace()
     n_unique = len(set(query_array))
     num_shapes = min([n_unique, 3])
     for shape in range(num_shapes):
@@ -178,7 +175,6 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
             renderer = NVR_Renderer(args.device)
             renderer.model.to(args.device)
 
-        # #import pdb; pdb.set_trace()
         if not iter%1000:
             with torch.cuda.amp.autocast():
                 do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features)
@@ -191,7 +187,6 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         flow_optimizer.zero_grad()
         net_optimizer.zero_grad()
         
-        # #import pdb; pdb.set_trace()
         with torch.cuda.amp.autocast():
             loss = clip_loss(args,query_array,visual_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features)        
         loss.backward()
@@ -232,7 +227,6 @@ def main(args):
         renderer = renderer.to(args.device)
         renderer.model.to(args.device)
         renderer = nn.DataParallel(renderer)
-        #import pdb; pdb.set_trace()
         # renderer.preprocessor = nn.DataParallel(renderer.preprocessor)
     net = nn.DataParallel(net)
 
