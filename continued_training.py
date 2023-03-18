@@ -175,12 +175,11 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
             renderer = NVR_Renderer(args.device)
             renderer.model.to(args.device)
 
-        # import pdb; pdb.set_trace()
         if not iter%1000:
             with torch.cuda.amp.autocast():
                 do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features)
         
-        if not (iter%5000) and iter!=0:
+        if not (iter%1000) and iter!=0 and iter<=5000:
             #save encoder and latent flow network
             torch.save(latent_flow_model.state_dict(), '/scratch/km3888/queries/%s/flow_model_%s.pt' % (args.id,iter))
             torch.save(autoencoder.module.encoder.state_dict(), '/scratch/km3888/queries/%s/aencoder_%s.pt' % (args.id,iter))
@@ -188,7 +187,6 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         flow_optimizer.zero_grad()
         net_optimizer.zero_grad()
         
-        # import pdb; pdb.set_trace()
         with torch.cuda.amp.autocast():
             loss = clip_loss(args,query_array,visual_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features)        
         loss.backward()
@@ -232,7 +230,6 @@ def main(args):
         print("OG LENGTH")
         print(len(list(renderer.model.merger.parameters())))
         renderer = nn.DataParallel(renderer)
-        import pdb; pdb.set_trace()
         # renderer.preprocessor = nn.DataParallel(renderer.preprocessor)
     net = nn.DataParallel(net)
 
