@@ -75,7 +75,8 @@ def gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features):
     return out_3d
 
 def do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features):
-    out_3d = gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features)
+    with torch.no_grad():
+      out_3d = gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features)
     #save out_3d to numpy file
     # with open(f'out_3d/{args.learning_rate}_{args.query_array}/out_3d_{iter}.npy', 'wb') as f:
     #     np.save(f, out_3d.cpu().detach().numpy())
@@ -174,10 +175,10 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
             renderer = NVR_Renderer(args.device)
             renderer.model.to(args.device)
 
-        # import pdb; pdb.set_trace()
         if not iter%1000:
             with torch.cuda.amp.autocast():
-                do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features)
+                with torch.no_grad():
+                    do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features)
         
         if not (iter%5000) and iter!=0:
             #save encoder and latent flow network
@@ -187,7 +188,6 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         flow_optimizer.zero_grad()
         net_optimizer.zero_grad()
         
-        # import pdb; pdb.set_trace()
         with torch.cuda.amp.autocast():
             loss = clip_loss(args,query_array,visual_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features)        
         loss.backward()
@@ -228,10 +228,7 @@ def main(args):
         renderer = NVR_Renderer(device)
         renderer = renderer.to(args.device)
         renderer.model.to(args.device)
-        print("OG LENGTH")
-        print(len(list(renderer.model.merger.parameters())))
         renderer = nn.DataParallel(renderer)
-        import pdb; pdb.set_trace()
         # renderer.preprocessor = nn.DataParallel(renderer.preprocessor)
     net = nn.DataParallel(net)
 

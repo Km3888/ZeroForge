@@ -28,5 +28,6 @@ singularity exec --nv --overlay $OVERLAY_FILE $SINGULARITY_IMAGE /bin/bash \
 -c "source /ext3/miniconda3/bin/activate;\
 python hpc_scripts/job_array.py --setting ${SLURM_ARRAY_TASK_ID} \
 --slurm_id ${SLURM_ARRAY_JOB_ID} \
---num_voxels 128 --gpu 0 \
+--num_voxels 128 --gpu 0 --query_array "airplane" \
+--init og_init --init_base \
 "
