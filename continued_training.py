@@ -177,7 +177,8 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
 
         if not iter%1000:
             with torch.cuda.amp.autocast():
-                do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features)
+                with torch.no_grad():
+                    do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features)
         
         if not (iter%5000) and iter!=0:
             #save encoder and latent flow network
