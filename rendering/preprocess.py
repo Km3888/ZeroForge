@@ -14,6 +14,8 @@ from tensorflow_graphics.rendering.volumetric import visual_hull
 from tensorflow_graphics.geometry.representation import grid
 from tensorflow_graphics.geometry.transformation import rotation_matrix_3d
 
+from pytorch3d.transforms import euler_angles_to_matrix
+
 if True:
     camera_rotation_matrix= np.array([[ 9.9997330e-01,  7.3080887e-03,  8.9461202e-11],\
     [ 4.9256836e-03, -6.7398632e-01, -7.3872751e-01],\
@@ -146,26 +148,25 @@ def diff_object_to_world(voxels,
                     target_volume_size=(128, 128, 128)):
     """Apply the transformations to the voxels and place them in world coords."""
     scale_factor = 1.82  # object to world voxel space scale factor
-
-    translation_vector = tf.expand_dims(translation_vector, axis=-1)
-
-    sampling_points = tf.cast(helpers.sampling_points_from_3d_grid(target_volume_size),
-                            tf.float32)  # 128^3 X 3
-    transf_matrix_x = rotation_matrix_3d.from_euler(euler_angles_x)  # [B, 3, 3]
-    transf_matrix_y = rotation_matrix_3d.from_euler(euler_angles_y)  # [B, 3, 3]
-    transf_matrix = tf.matmul(transf_matrix_x, transf_matrix_y)  # [B, 3, 3]
-    transf_matrix = transf_matrix*scale_factor  # [B, 3, 3]
-    sampling_points = tf.matmul(transf_matrix,
-                                tf.transpose(sampling_points))  # [B, 3, N]
-    translation_vector = tf.matmul(transf_matrix, translation_vector)  # [B, 3, 1]
+    translation_vector = torch.from_numpy(translation_vector).to(voxels.device).unsqueeze(-1)
+    euler_angles_x = torch.from_numpy(euler_angles_x).to(voxels.device)
+    euler_angles_y = torch.from_numpy(euler_angles_y).to(voxels.device)
+    
+    sampling_points = torch.tensor(helpers.sampling_points_from_3d_grid(target_volume_size).numpy(),
+                               dtype=torch.float32).to(voxels.device)  # 128^3 x 3
+    transf_matrix_x = euler_angles_to_matrix(euler_angles_x, "XYZ")  # [B, 3, 3]
+    transf_matrix_y = euler_angles_to_matrix(euler_angles_y, "XYZ")  # [B, 3, 3]
+    transf_matrix = torch.matmul(transf_matrix_x, transf_matrix_y)  # [B, 3, 3]
+    transf_matrix = transf_matrix * scale_factor  # [B, 3, 3]
+    sampling_points = torch.matmul(transf_matrix,
+                                torch.transpose(sampling_points, 0, 1))  # [B, 3, N]
+    translation_vector = translation_vector.to(transf_matrix.dtype)
+    translation_vector = torch.matmul(transf_matrix, translation_vector)  # [B, 3, 1]
     sampling_points = sampling_points - translation_vector
-    sampling_points = tf.linalg.matrix_transpose(sampling_points)
-    sampling_points = tf.cast(sampling_points, tf.float32)
-
-    #okay now we care about differentiability so convert to PyTorch and put on GPU
-    sampling_points = torch.from_numpy(sampling_points.numpy()).to(voxels.device)
-
-    sampling_points = sampling_points.view(-1,128,128,128,3)
+    sampling_points = torch.transpose(sampling_points, 0, 1)
+    sampling_points = sampling_points.to(torch.float32)
+    
+    sampling_points = sampling_points.reshape(-1,128,128,128,3)
     sampling_points = sampling_points.expand(voxels.shape[0],-1,-1,-1,-1)
 
     voxels = voxels.permute(0,4,1,2,3)
