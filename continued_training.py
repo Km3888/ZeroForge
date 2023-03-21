@@ -31,6 +31,64 @@ import sys
 import numpy as np
 import torch.nn as nn
 
+class Model(nn.Module):
+    def __init__(self, args, clip_model, autoencoder, latent_flow_model, renderer, resizer, query_array):
+        super(Model, self).__init__()
+        self.autoencoder = autoencoder        
+        self.latent_flow_model = latent_flow_model
+
+        self.clip_model = clip_model
+        #set clip model gradients to false
+        for param in self.clip_model.parameters():
+            param.requires_grad = False
+
+        self.renderer = renderer
+        self.resizer = resizer
+        self.query_array = query_array
+        self.args = args
+
+    def get_shapes(self):
+        self.autoencoder.train()
+        self.latent_flow_model.eval() # has to be in .eval() mode for the sampling to work (which is bad but whatever)
+
+        voxel_size = self.args.num_voxels
+        batch_size = len(self.query_array)
+        
+        shape = (voxel_size, voxel_size, voxel_size)
+        p = visualization.make_3d_grid([-0.5] * 3, [+0.5] * 3, shape).type(torch.FloatTensor).to(self.args.device)
+        query_points = p.expand(batch_size, *p.size())
+
+        noise = torch.Tensor(batch_size, self.args.latent_dim).to(self.args.device)
+        decoder_embs = get_condition_embeddings(self.args, self.clip_model, self.query_array)
+
+        out_3d = self.autoencoder.decode(noise, decoder_embs, query_points)
+        return out_3d
+
+    def clip_loss(self, text_features):
+        out_3d = self.get_shapes()
+        out_3d_soft = torch.sigmoid(self.args.beta*(out_3d-self.args.threshold))
+
+        ims = self.renderer.render(out_3d_soft).double()
+        ims = self.resizer(ims)
+
+        img_embs = self.clip_model.encode_image(ims.type(self.args.visual_model_type))
+        if self.args.renderer=='ea':
+            #baseline renderer gives 3 dimensions
+            text_features=text_features.unsqueeze(1).expand(-1,3,-1).reshape(-1,512)
+        
+        losses=-1*torch.cosine_similarity(text_features,im_embs)
+        loss = losses.mean()
+
+        # if self.args.use_tensorboard and not iter%50:
+        #     im_samples= ims.view(-1,3,224,224)
+        #     grid = torchvision.utils.make_grid(im_samples, nrow=3)
+        #     self.args.writer.add_image('images', grid, iter)
+
+        return loss
+
+    def forward(self, text_features):
+        return self.clip_loss(text_features)
+
 def get_type(visual_model):
     return visual_model.conv1.weight.dtype
 
@@ -75,12 +133,7 @@ def get_clip_model(args):
     input_resolution = clip_model.visual.input_resolution
     #train_cond_embs_length = clip_model.train_cond_embs_length
     vocab_size = clip_model.vocab_size
-    #cond_emb_dim  = clip_model.embed_dim
-    #print("Model parameters:", f"{np.sum([int(np.prod(p.shape)) for p in clip_model.parameters()]):,}")
-    print("cond_emb_dim:", cond_emb_dim)
-    print("Input resolution:", input_resolution)
-    #print("train_cond_embs length:", train_cond_embs_length)
-    print("Vocab size:", vocab_size)
+ 
     args.n_px = input_resolution
     args.cond_emb_dim = cond_emb_dim
     return args, clip_model
@@ -205,10 +258,13 @@ def get_local_parser(mode="args"):
     else:
         return parser
 
-def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):    
+def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):   
+
+    
+
     resizer = T.Resize(224)
-    flow_optimizer=optim.Adam(latent_flow_model.parameters(), lr=args.learning_rate)
-    net_optimizer=optim.Adam(autoencoder.parameters(), lr=args.learning_rate)
+    # flow_optimizer=optim.Adam(latent_flow_model.parameters(), lr=args.learning_rate)
+    # net_optimizer=optim.Adam(autoencoder.parameters(), lr=args.learning_rate)
 
     losses = []
     
@@ -223,30 +279,41 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     if not os.path.exists('queries/%s' % args.writer.log_dir[5:]):
         os.makedirs('queries/%s' % args.writer.log_dir[5:])
 
-    #remove text components from clip and free up memory
-    visual_model = clip_model.visual
-    del clip_model
+    # model
+    net = Model(args,clip_model,autoencoder,latent_flow_model,renderer,resizer,query_array)
 
-    #set gradient of clip model to false
-    for param in visual_model.parameters():
-        param.requires_grad = False
-    visual_model.eval()
-    torch.cuda.empty_cache()
+    net_optimizer = optim.Adam(net.parameters(), lr=args.learning_rate)
 
-    global visual_model_type
-    visual_model_type = get_type(visual_model)
-    visual_model = nn.DataParallel(visual_model)
+    net = nn.DataParallel(net)
+    
+    # print("Done")
+
+    # #remove text components from clip and free up memory
+    # visual_model = clip_model.visual
+    # del clip_model
+
+    # #set gradient of clip model to false
+    # for param in visual_model.parameters():
+    #     param.requires_grad = False
+    # visual_model.eval()
+    # torch.cuda.empty_cache()
+
+    # global visual_model_type
+    # visual_model_type = get_type(visual_model)
+    # visual_model = nn.DataParallel(visual_model)
 
     for iter in range(20000):
-        if not iter%100:
-            do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features)
+        # if not iter%100:
+        #     do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features)
             
 
-        flow_optimizer.zero_grad()
+        # flow_optimizer.zero_grad()
         net_optimizer.zero_grad()
         
-        loss = clip_loss(args,query_array,visual_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features)        
+        # loss = clip_loss(args,query_array,visual_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features)        
         
+        loss = net(text_features)
+
         loss.backward()
                 
         losses.append(loss.item())
@@ -287,8 +354,6 @@ def main(args):
     
     latent_flow_network = latent_flows.get_generator(args.emb_dims, args.cond_emb_dim, device, flow_type=args.flow_type, num_blocks=args.num_blocks, num_hidden=args.num_hidden)
     if not args.uninitialized:
-        print(args.checkpoint_dir_prior)
-        print(args.checkpoint)
         sys.stdout.flush()
         checkpoint_nf_path = os.path.join(args.checkpoint_dir_prior,  args.checkpoint_nf +".pt")
         checkpoint = torch.load(checkpoint_nf_path, map_location=args.device)
