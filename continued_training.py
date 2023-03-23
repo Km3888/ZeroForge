@@ -34,88 +34,61 @@ import torch.nn as nn
 
 from continued_utils import query_arrays, make_writer, get_networks, get_local_parser, get_clip_model,get_text_embeddings,get_type,make_init_dict
 
-def clip_loss(args,query_array,visual_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features):
-    out_3d = gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features)
-    out_3d_soft = torch.sigmoid(args.beta*(out_3d-args.threshold))#.clone()
-    
-    ims = renderer(out_3d_soft,orthogonal=args.orthogonal).double()
-    ims = resizer(ims)
+class Wrapper(nn.Module):
+    def __init__(self, args, clip_model, autoencoder, latent_flow_model, renderer, resizer, query_array):
+        super(Wrapper, self).__init__()
+        self.clip_model = clip_model
 
-    im_embs=visual_model(ims.type(visual_model_type))
-    if args.renderer=='ea':
-        #baseline renderer gives 3 dimensions
-        text_features=text_features.unsqueeze(1).expand(-1,3,-1).reshape(-1,512)
+        #freeze clip model
+        for param in self.clip_model.parameters():
+            param.requires_grad = False
+        self.clip_model.eval()
 
-    losses=-1*torch.cosine_similarity(text_features,im_embs)
-    loss = losses.mean()
+        self.autoencoder = autoencoder
+        self.latent_flow_model = latent_flow_model
 
-    if args.use_tensorboard and not iter%50:
-        im_samples= ims.view(-1,3,224,224)
-        grid = torchvision.utils.make_grid(im_samples, nrow=3)
-        args.writer.add_image('images', grid, iter)
+        self.renderer = renderer
 
-    return loss
+        #freeze renderer
+        for param in self.renderer.parameters():
+            param.requires_grad = False
+        self.renderer.eval()
 
-#TODO remove query_array param
-def gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features):
-    autoencoder.train()#TODO don't do this in eval
-    latent_flow_model.eval() # has to be in .eval() mode for the sampling to work (which is bad but whatever)
-    
-    voxel_size = args.num_voxels
-    batch_size = len(query_array)
+        self.resizer = resizer
+        self.query_array = query_array
+        self.args = args
+
+    def clip_loss(self, text_features, iter):
+        # out_3d = self.gen_shapes(text_features)
+        out_3d = gen_shapes(self.query_array, self.args, self.autoencoder, self.latent_flow_model, text_features)
+        out_3d_soft = torch.sigmoid(self.args.beta*(out_3d-self.args.threshold))#.clone()
+
+        ims = self.renderer(out_3d_soft,orthogonal=self.args.orthogonal).double()
+        ims = self.resizer(ims)
+        im_samples = ims.view(-1,3,224,224)
         
-    shape = (voxel_size, voxel_size, voxel_size)
-    p = visualization.make_3d_grid([-0.5] * 3, [+0.5] * 3, shape).type(torch.FloatTensor).to(args.device)
-    query_points = p.expand(batch_size, *p.size())
+        im_embs = self.clip_model.encode_image(ims)
+        if self.args.renderer=='ea':
+            #baseline renderer gives 3 dimensions
+            text_features=text_features.unsqueeze(1).expand(-1,3,-1).reshape(-1,512)
         
-    noise = torch.Tensor(batch_size, args.emb_dims).normal_().to(args.device)
-    decoder_embs = latent_flow_model.sample(batch_size, noise=noise, cond_inputs=text_features)
+        losses=-1*torch.cosine_similarity(text_features,im_embs)
 
-    out_3d = autoencoder(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size).to(args.device)
-    return out_3d
+       
+        return losses, im_samples
 
-def do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features):
-    with torch.no_grad():
-      out_3d = gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features)
-    #save out_3d to numpy file
-    # with open(f'out_3d/{args.learning_rate}_{args.query_array}/out_3d_{iter}.npy', 'wb') as f:
-    #     np.save(f, out_3d.cpu().detach().numpy())
-    out_3d_hard = out_3d.detach() > args.threshold
-    # rgbs_hard = renderer.render(out_3d_hard.float(),orthogonal=args.orthogonal).double().to(args.device)
-    rgbs_hard = renderer(out_3d_hard.float(),orthogonal=args.orthogonal).to(args.device)
-    rgbs_hard = resizer(rgbs_hard)
-    # hard_im_embeddings = clip_model.encode_image(rgbs_hard)
-    hard_im_embeddings = visual_model(rgbs_hard.type(visual_model_type))
-    if args.renderer=='ea':
-        #baseline renderer gives 3 dimensions
-        hard_loss = -1*torch.cosine_similarity(text_features.unsqueeze(1).expand(-1,3,-1).reshape(-1,512),hard_im_embeddings).mean()
-    else:
-        hard_loss = -1*torch.cosine_similarity(text_features,hard_im_embeddings).mean()
-    #write to tensorboard
-    voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,iter,query_array)
-    if args.use_tensorboard:
-        args.writer.add_scalar('Loss/hard_loss', hard_loss, iter)
-        args.writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
-
-    rgbs_hard.to("cpu")
-    out_3d_hard.to("cpu")
-    out_3d.to("cpu")
-    hard_loss.to("cpu")
-    del rgbs_hard
-    del out_3d_hard
-    del out_3d
-    del hard_loss
-    gc.collect()
-    torch.cuda.empty_cache()
-
-def evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,i,query_array):
+    def forward(self, text_features, iter):
+        return self.clip_loss(text_features, iter)
+       
+def evaluate_true_voxel(out_3d_hard,args,clip_model,text_features,i,query_array):
+    
     # code for saving the "true" voxel image
     voxel_ims=[]
     num_shapes = out_3d_hard.shape[0]
     n_unique = len(set(query_array))
     num_shapes = min([n_unique, 3])
     for shape in range(num_shapes):
-        save_path = '/scratch/km3888/queries/%s/sample_%s_%s.png' % (args.id,i,shape)
+        save_path = '/scratch/mp5847/queries/%s/sample_%s_%s.png' % (args.id,i,shape)
         voxel_save(out_3d_hard[shape].squeeze().detach().cpu(), None, out_file=save_path)
         # load the image that was saved and transform it to a tensor
         voxel_im = PIL.Image.open(save_path).convert('RGB')
@@ -125,85 +98,125 @@ def evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,i,query_arra
     voxel_ims = torch.cat(voxel_ims,0)
     grid = torchvision.utils.make_grid(voxel_ims, nrow=num_shapes)
 
-    # for shape in range(num_shapes):
-    #     save_path = '/scratch/km3888/queries/%s/sample_%s_%s.png' % (args.id,i,shape)
-    #     os.remove(save_path)
+    for shape in range(num_shapes):
+        save_path = '/scratch/mp5847/queries/%s/sample_%s_%s.png' % (args.id,i,shape)
+        # os.remove(save_path)
 
     if args.use_tensorboard:
         args.writer.add_image('voxel image', grid, i)
     # #convert to 224x224 image with 3 channels
     voxel_tensor = T.Resize((224,224))(voxel_ims)
+
     # get CLIP embedding
-    voxel_image_embedding = visual_model(voxel_tensor.to(args.device).type(visual_model_type))
+    # voxel_image_embedding = visual_model(voxel_tensor.to(args.device).type(visual_model_type))
+    voxel_image_embedding = clip_model.encode_image(voxel_tensor.to(args.device))
     voxel_similarity = torch.cosine_similarity(text_features[:num_shapes], voxel_image_embedding).mean()
     return voxel_similarity
 
+def gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features):
+    autoencoder.train()#TODO don't do this in eval
+    latent_flow_model.eval() # has to be in .eval() mode for the sampling to work (which is bad but whatever)
+    
+    voxel_size = args.num_voxels
+    batch_size = len(query_array)
+    
+    #hard code for now
+    batch_size = len(text_features)
+        
+    shape = (voxel_size, voxel_size, voxel_size)
+    p = visualization.make_3d_grid([-0.5] * 3, [+0.5] * 3, shape).type(torch.FloatTensor).to(text_features.device)
+    query_points = p.expand(batch_size, *p.size())
+        
+    noise = torch.Tensor(batch_size, args.emb_dims).normal_().to(text_features.device)
+    decoder_embs = latent_flow_model.sample(text_features.device, batch_size, noise=noise, cond_inputs=text_features)
+
+    out_3d = autoencoder(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size).to(text_features.device)
+    return out_3d
+
+def do_eval(renderer,query_array,args,clip_model,autoencoder,latent_flow_model,resizer,iter,text_features):
+    with torch.no_grad():
+      out_3d = gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features)
+    #save out_3d to numpy file
+    # with open(f'out_3d/{args.learning_rate}_{args.query_array}/out_3d_{iter}.npy', 'wb') as f:
+    #     np.save(f, out_3d.cpu().detach().numpy())
+    out_3d_hard = out_3d.detach() > args.threshold
+    # rgbs_hard = renderer.render(out_3d_hard.float(),orthogonal=args.orthogonal).double().to(args.device)
+    rgbs_hard = renderer(out_3d_hard.float(),orthogonal=args.orthogonal).to(args.device)
+    rgbs_hard = resizer(rgbs_hard)
+    hard_im_embeddings = clip_model.encode_image(rgbs_hard)
+    if args.renderer=='ea':
+        #baseline renderer gives 3 dimensions
+        hard_loss = -1*torch.cosine_similarity(text_features.unsqueeze(1).expand(-1,3,-1).reshape(-1,512),hard_im_embeddings).mean()
+    else:
+        hard_loss = -1*torch.cosine_similarity(text_features,hard_im_embeddings).mean()
+        
+    #write to tensorboard
+    voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard,args,clip_model,text_features,iter,query_array)
+    if args.use_tensorboard:
+        args.writer.add_scalar('Loss/hard_loss', hard_loss, iter)
+        args.writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
+
 def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):    
     resizer = T.Resize(224)
-    flow_optimizer=optim.Adam(latent_flow_model.parameters(), lr=args.learning_rate)
-    net_optimizer=optim.Adam(autoencoder.parameters(), lr=args.learning_rate)
 
     losses = []
     if args.query_array in query_arrays:
         query_array = query_arrays[args.query_array]
     else:
         query_array = [args.query_array]
+    
     query_array = query_array*args.num_views
+
     text_features = get_text_embeddings(args,clip_model,query_array).detach()
+
     # make directory for saving images with name of the text query using os.makedirs
-    if not os.path.exists('/scratch/km3888/queries/%s' % args.id):
-        os.makedirs('/scratch/km3888/queries/%s' % args.id)
+    if not os.path.exists('/scratch/mp5847/queries/%s' % args.id):
+        os.makedirs('/scratch/mp5847/queries/%s' % args.id)   
 
-    #remove text components from clip and free up memory
-    visual_model = clip_model.visual
-    del clip_model
+    wrapper = Wrapper(args, clip_model, autoencoder, latent_flow_model, renderer, resizer, query_array)
 
-    #set gradient of clip model to false
-    for param in visual_model.parameters():
-        param.requires_grad = False
-    visual_model.eval()
-    torch.cuda.empty_cache()
+    wrapper = nn.DataParallel(wrapper).to(args.device)
 
-    global visual_model_type
-    visual_model_type = get_type(visual_model)
-    visual_model = nn.DataParallel(visual_model)
+    wrapper_optimizer = optim.Adam(wrapper.parameters(), lr=args.learning_rate)
 
     for iter in range(20000):
         if args.switch_point is not None and iter == args.switch_point:
             args.renderer = 'nvr+'
-            args.num_view = 10
-            renderer = NVR_Renderer(args.device)
-            renderer.model.to(args.device)
+            renderer = NVR_Renderer(args, args.device)
 
-        if not iter%1000:
+        if not iter%100:
             with torch.cuda.amp.autocast():
                 with torch.no_grad():
-                    do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features)
-        
+                    do_eval(wrapper.module.renderer, query_array, args, wrapper.module.clip_model, wrapper.module.autoencoder, wrapper.module.latent_flow_model, wrapper.module.resizer, iter, text_features)
+                    
         if not (iter%5000) and iter!=0:
-            #save encoder and latent flow network
-            torch.save(latent_flow_model.state_dict(), '/scratch/km3888/queries/%s/flow_model_%s.pt' % (args.id,iter))
-            torch.save(autoencoder.module.encoder.state_dict(), '/scratch/km3888/queries/%s/aencoder_%s.pt' % (args.id,iter))
-            
-        flow_optimizer.zero_grad()
-        net_optimizer.zero_grad()
+            # save encoder and latent flow network
+            torch.save(wrapper.module.latent_flow_model.state_dict(), '/scratch/mp5847/queries/%s/flow_model_%s.pt' % (args.id,iter))
+            torch.save(wrapper.module.autoencoder.state_dict(), '/scratch/mp5847/queries/%s/aencoder_%s.pt' % (args.id,iter))
+
+        wrapper_optimizer.zero_grad()
         
         with torch.cuda.amp.autocast():
-            loss = clip_loss(args,query_array,visual_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features)        
+            loss, im_samples = wrapper(text_features, iter)
+            loss = loss.mean()
+                    
+        print(iter, loss)
         loss.backward()
         losses.append(loss.detach().item())
         
-        if args.use_tensorboard:
-            args.writer.add_scalar('Loss/train', loss.item(), iter)
+        if args.use_tensorboard and not iter%50:
+            if not iter%50:
+                grid = torchvision.utils.make_grid(im_samples, nrow=3)
+                args.writer.add_image('images', grid, iter)
+            args.writer.add_scalar('Loss/train', loss.item(), iter)            
         
-        flow_optimizer.step()
-        net_optimizer.step()
+        wrapper_optimizer.step()
         if not iter:
             print('finished first iter')
     
     #save latent flow and AE networks
-    torch.save(latent_flow_model.state_dict(), '/scratch/km3888/queries/%s/final_flow_model.pt' % args.id)
-    torch.save(autoencoder.module.encoder.state_dict(), '/scratch/km3888/queries/%s/final_aencoder.pt' % args.id)
+    torch.save(wrapper.module.state_dict(), '/scratch/mp5847/queries/%s/final_flow_model.pt' % args.id)
+    torch.save(wrapper.module.autoencoder.encoder.state_dict(), '/scratch/mp5847/queries/%s/final_aencoder.pt' % args.id)
     
     print(losses)
 
@@ -217,20 +230,15 @@ def main(args):
     
     print("Using device: ", device)
     args, clip_model = get_clip_model(args) 
-    
+
     init_dict = make_init_dict()[args.init]
     net,latent_flow_network = get_networks(args,init_dict)
-    
+
     param_dict={'device':args.device,'cube_len':args.num_voxels}
     if args.renderer == 'ea' or args.switch_point is not None:
         renderer=BaselineRenderer('absorption_only',param_dict)
     elif args.renderer == 'nvr+':
-        renderer = NVR_Renderer(device)
-        renderer = renderer.to(args.device)
-        renderer.model.to(args.device)
-        renderer = nn.DataParallel(renderer)
-        # renderer.preprocessor = nn.DataParallel(renderer.preprocessor)
-    net = nn.DataParallel(net)
+        renderer = NVR_Renderer(args, args.device)
 
     test_train(args,clip_model,net,latent_flow_network,renderer)
     

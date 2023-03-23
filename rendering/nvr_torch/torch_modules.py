@@ -113,7 +113,7 @@ class Merger(nn.Module):
         for res_i in self.res_blocks:
             latent_code = res_i(latent_code)
         
-        latent_code = latent_code.to(shortcut.device)
+        latent_code = latent_code.to(shortcut.device) #hack
         latent_code = latent_code + shortcut
 
         return latent_code
