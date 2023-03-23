@@ -111,10 +111,11 @@ class CouplingLayer(nn.Module):
                 nn.init.orthogonal_(m.weight.data)
 
     def forward(self, inputs, cond_inputs=None, mode='direct'):
-        mask = self.mask
-        
+        mask = self.mask.to(inputs.device) #torch.arrange does not automatically move to device, so we need to do it manually
+
         masked_inputs = inputs * mask
         if cond_inputs is not None:
+           
             masked_inputs = torch.cat([masked_inputs, cond_inputs], -1)
         
         if mode == 'direct':
@@ -165,16 +166,16 @@ class FlowSequential(nn.Sequential):
             -1, keepdim=True)
         return (log_probs + log_jacob).sum(-1, keepdim=True)
 
-    def sample(self, num_samples=None, noise=None, cond_inputs=None):
+    def sample(self, device, num_samples=None, noise=None, cond_inputs=None):
         if noise is None:
             noise = torch.Tensor(num_samples, self.num_inputs).normal_()
-        device = next(self.parameters()).device
+        # device = next(self.parameters()).device
         noise = noise.to(device)
         if cond_inputs is not None:
             cond_inputs = cond_inputs.to(device)
+
         samples = self.forward(noise, cond_inputs, mode='inverse')[0]
         return samples
-    
     
 def get_generator(num_inputs, num_cond_inputs, device, flow_type="realnvp", num_blocks=5, num_hidden=1024):
     num_blocks = num_blocks
@@ -201,6 +202,7 @@ def get_generator(num_inputs, num_cond_inputs, device, flow_type="realnvp", num_
     elif flow_type == 'realnvp_half': ### Dimesion Masking
         mask = (torch.arange(0, num_inputs) < (num_inputs/2)).type(torch.uint8)
         mask = mask.to(device).float()
+
         for _ in range(num_blocks):
             modules += [
                 CouplingLayer(
