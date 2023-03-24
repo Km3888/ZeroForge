@@ -3,6 +3,7 @@ os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:512"
 import os.path as osp
 import logging
 import gc
+import time
 
 import torch
 import torch.optim as optim
@@ -31,13 +32,16 @@ import PIL
 import sys
 import numpy as np
 import torch.nn as nn
+import random 
 
 from continued_utils import query_arrays, make_writer, get_networks, get_local_parser, get_clip_model,get_text_embeddings,get_type,make_init_dict
+from utils import helper
 
-def clip_loss(args,query_array,visual_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features):
+import PIL
+
+def clip_loss(args,query_array,visual_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features):    
     out_3d = gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features)
     out_3d_soft = torch.sigmoid(args.beta*(out_3d-args.threshold))#.clone()
-    
     ims = renderer(out_3d_soft,orthogonal=args.orthogonal).double()
     ims = resizer(ims)
 
@@ -49,7 +53,7 @@ def clip_loss(args,query_array,visual_model,autoencoder,latent_flow_model,render
     losses=-1*torch.cosine_similarity(text_features,im_embs)
     loss = losses.mean()
 
-    if args.use_tensorboard and not iter%50:
+    if args.use_tensorboard and not iter%200:
         im_samples= ims.view(-1,3,224,224)
         grid = torchvision.utils.make_grid(im_samples, nrow=3)
         args.writer.add_image('images', grid, iter)
@@ -70,11 +74,25 @@ def gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features):
         
     noise = torch.Tensor(batch_size, args.emb_dims).normal_().to(args.device)
     decoder_embs = latent_flow_model.sample(batch_size, noise=noise, cond_inputs=text_features)
-
     out_3d = autoencoder(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size).to(args.device)
     return out_3d
 
-def do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features):
+def save_images(rgbs_hard,iter,args,query_array):
+    rgbs_hard = rgbs_hard.view(-1,3,224,224)
+    # save each image separately using args.id and PIL
+    # creat a folder for each query array if it doesn't exist
+    if not os.path.exists(f'/scratch/km3888/queries/out_images/{args.id}'):
+        os.makedirs(f'/scratch/km3888/queries/out_images/{args.id}')
+    for i in range(len(rgbs_hard)):
+        rgbs_hard[i] = (rgbs_hard[i] - rgbs_hard[i].min()) / (rgbs_hard[i].max() - rgbs_hard[i].min())
+        rgbs_hard[i] = rgbs_hard[i].mul(255).clamp(0, 255).byte()
+        print(rgbs_hard[i].shape)
+        rgbs_hard_i = rgbs_hard[i].permute(1,2,0)
+        rgbs_hard_i = rgbs_hard_i.cpu().numpy()
+        rgbs_hard_i = PIL.Image.fromarray(rgbs_hard_i.astype(np.uint8))
+        rgbs_hard_i.save(f'/scratch/km3888/queries/out_images/{args.id}/{iter}_{query_array[i]}.png')
+    
+def do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features,best_hard_loss):
     with torch.no_grad():
       out_3d = gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features)
     #save out_3d to numpy file
@@ -93,11 +111,15 @@ def do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model
         hard_loss = -1*torch.cosine_similarity(text_features,hard_im_embeddings).mean()
 
     #write to tensorboard
-    voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,iter,query_array)
-    if args.use_tensorboard:
+    if args.use_tensorboard and not iter%1000:
+        # voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,iter,query_array)
         args.writer.add_scalar('Loss/hard_loss', hard_loss, iter)
-        args.writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
+        # args.writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
 
+    if hard_loss<best_hard_loss:
+        save_images(rgbs_hard,iter,args,query_array)
+        best_hard_loss = hard_loss
+    
     rgbs_hard.to("cpu")
     out_3d_hard.to("cpu")
     out_3d.to("cpu")
@@ -108,6 +130,8 @@ def do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model
     del hard_loss
     gc.collect()
     torch.cuda.empty_cache()
+    
+    return best_hard_loss
 
 def evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,i,query_array):
     # code for saving the "true" voxel image
@@ -126,9 +150,9 @@ def evaluate_true_voxel(out_3d_hard,args,visual_model,text_features,i,query_arra
     voxel_ims = torch.cat(voxel_ims,0)
     grid = torchvision.utils.make_grid(voxel_ims, nrow=num_shapes)
 
-    # for shape in range(num_shapes):
-    #     save_path = '/scratch/km3888/queries/%s/sample_%s_%s.png' % (args.id,i,shape)
-    #     os.remove(save_path)
+    for shape in range(num_shapes):
+        save_path = '/scratch/km3888/queries/%s/sample_%s_%s.png' % (args.id,i,shape)
+        os.remove(save_path)
 
     if args.use_tensorboard:
         args.writer.add_image('voxel image', grid, i)
@@ -168,7 +192,9 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     global visual_model_type
     visual_model_type = get_type(visual_model)
     visual_model = nn.DataParallel(visual_model)
-
+    
+    start_time = time.time()
+    best_hard_loss = float('inf')
     for iter in range(20000):
         if args.switch_point is not None and iter == args.switch_point:
             args.renderer = 'nvr+'
@@ -176,11 +202,14 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
             renderer = NVR_Renderer(args.device)
             renderer.model.to(args.device)
 
-        if not iter%1000:
+        if not iter%200:
             with torch.cuda.amp.autocast():
                 with torch.no_grad():
-                    do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features)
-        
+                    best_hard_loss = do_eval(renderer,query_array,args,visual_model,autoencoder,latent_flow_model,resizer,iter,text_features,best_hard_loss)
+                if not iter:
+                    print('eval time:', time.time()-start_time)
+                    start_time = time.time()
+                    sys.stdout.flush()
         if not (iter%1000) and iter!=0 and iter<=5000:
             #save encoder and latent flow network
             torch.save(latent_flow_model.state_dict(), '/scratch/km3888/queries/%s/flow_model_%s.pt' % (args.id,iter))
@@ -190,7 +219,7 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         net_optimizer.zero_grad()
         
         with torch.cuda.amp.autocast():
-            loss = clip_loss(args,query_array,visual_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features)        
+            loss = clip_loss(args,query_array,visual_model,autoencoder,latent_flow_model,renderer,resizer,iter,text_features)
         loss.backward()
         losses.append(loss.detach().item())
         
@@ -200,8 +229,10 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         flow_optimizer.step()
         net_optimizer.step()
         if not iter:
-            print('finished first iter')
-    
+            print('train time:', time.time()-start_time)
+        if not iter%500:
+            print(iter)
+            
     #save latent flow and AE networks
     torch.save(latent_flow_model.state_dict(), '/scratch/km3888/queries/%s/final_flow_model.pt' % args.id)
     torch.save(autoencoder.module.encoder.state_dict(), '/scratch/km3888/queries/%s/final_aencoder.pt' % args.id)
@@ -239,6 +270,14 @@ if __name__=="__main__":
     args=get_local_parser()
     print('renderer %s' % args.renderer)
     import sys; sys.stdout.flush()
+    helper.set_seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
     main(args)
     
     sys.stdout.write(args.writer.log_dir[:5])
