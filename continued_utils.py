@@ -6,6 +6,7 @@ import torch
 import sys
 import os
 import numpy as np
+import random
 
 query_arrays = {
                 "wineglass": ["wineglass"],
@@ -18,6 +19,18 @@ query_arrays = {
                 "nine": ['wineglass','spoon','fork','knife','screwdriver','hammer',"soccer ball", "football","plate"],
                 "fourteen": ["wineglass','spoon','fork','knife','screwdriver','hammer","pencil","screw","plate","mushroom","umbrella","thimble","sombrero","sandal"]
 }
+
+prompts_prefix_pool = ["a photo of a ", "a "]
+
+def get_prompts(obj, num_prompts):
+    
+    #get prompts for each object
+    prompts = []
+    
+    for i in range(num_prompts):
+        prompts.append(random.choice(prompts_prefix_pool) + obj)
+    return prompts
+
 def make_init_dict():
     og_init = {"ae_path":"models/autoencoder/best_iou.pt", "flow_path":"models/prior/best.pt","num_blocks":5,"num_hidden":1024,"emb_dim":128}
     init_1 = {"ae_path":"New__Autoencoder_Shapenet_Voxel_Implicit_128_add_noise_1/checkpoints/best_iou.pt", \
@@ -111,11 +124,17 @@ def get_local_parser(mode="args"):
 
 def get_text_embeddings(args,clip_model,query_array):
     # get the text embedding for each query
+    prompts = []
+    for obj in set(query_array):
+        prompts.extend(get_prompts(obj, args.num_views))
+    print("in get text embeddings")
+    print(query_array)
     text_tokens = []
     with torch.no_grad():
-        for text in query_array:
+        for text in prompts:
+            print("text is: ", text)
             text_tokens.append(clip.tokenize([text]).detach().to(args.device))
-        
+    
     text_tokens = torch.cat(text_tokens,dim=0)
     text_features = clip_model.encode_text(text_tokens)
     text_features = text_features / text_features.norm(dim=-1, keepdim=True)

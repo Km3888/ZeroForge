@@ -32,7 +32,7 @@ import sys
 import numpy as np
 import torch.nn as nn
 
-from continued_utils import query_arrays, make_writer, get_networks, get_local_parser, get_clip_model,get_text_embeddings,get_type,make_init_dict
+from continued_utils import query_arrays, make_writer, get_networks, get_local_parser, get_clip_model,get_text_embeddings,get_type,make_init_dict, get_prompts
 
 class Wrapper(nn.Module):
     def __init__(self, args, clip_model, autoencoder, latent_flow_model, renderer, resizer, query_array):
@@ -164,10 +164,10 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         query_array = query_arrays[args.query_array]
     else:
         query_array = [args.query_array]
-    
+
     query_array = query_array*args.num_views
 
-    text_features = get_text_embeddings(args,clip_model,query_array).detach()
+    text_features = get_text_embeddings(args,clip_model, query_array).detach()
 
     # make directory for saving images with name of the text query using os.makedirs
     if not os.path.exists('/scratch/mp5847/queries/%s' % args.id):
