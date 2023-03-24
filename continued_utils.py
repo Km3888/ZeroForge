@@ -16,6 +16,7 @@ query_arrays = {
                 "four": ["spoon","fork","wineglass","knife"],
                 "six": ['wineglass','spoon','fork','knife','screwdriver','hammer'],
                 "nine": ['wineglass','spoon','fork','knife','screwdriver','hammer',"soccer ball", "football","plate"],
+                "thirteen": ["wineglass','spoon','fork','knife','screwdriver','hammer","pencil","screw","mushroom","umbrella","thimble","sombrero","sandal"],
                 "fourteen": ["wineglass','spoon','fork','knife','screwdriver','hammer","pencil","screw","plate","mushroom","umbrella","thimble","sombrero","sandal"]
 }
 def make_init_dict():
