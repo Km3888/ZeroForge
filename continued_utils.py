@@ -78,10 +78,13 @@ def get_prompts(obj, num_prompts, use_gpt):
         with open("json_name.json", "r") as f:
             promps_dict = json.load(f)
     
-    for i in range(num_prompts):
-        if(random.random() < 0.5 and use_gpt):
-            prompts.append(random.choice(promps_dict[obj]))
-        else:
+        for i in range(num_prompts):
+            if(random.random() < 0.5 and use_gpt):
+                prompts.append(random.choice(promps_dict[obj]))
+            else:
+                prompts.append(random.choice(prompts_prefix_pool) + obj)
+    else:
+        for i in range(num_prompts):
             prompts.append(random.choice(prompts_prefix_pool) + obj)
     return prompts
 
