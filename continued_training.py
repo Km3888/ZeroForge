@@ -86,7 +86,7 @@ def evaluate_true_voxel(out_3d_hard,args,clip_model,text_features,i,query_array)
     voxel_ims=[]
     num_shapes = out_3d_hard.shape[0]
     n_unique = len(set(query_array))
-    # num_shapes = min([n_unique, 3])
+    num_shapes = min([n_unique, 3])
     for shape in range(num_shapes):
         save_path = '/scratch/mp5847/queries/%s/sample_%s_%s.png' % (args.id,i,shape)
         voxel_save(out_3d_hard[shape].squeeze().detach().cpu(), None, out_file=save_path)
