@@ -32,7 +32,7 @@ import sys
 import numpy as np
 import torch.nn as nn
 
-from continued_utils import query_arrays, make_writer, get_networks, get_local_parser, get_clip_model,get_text_embeddings,get_type,make_init_dict, get_prompts
+from continued_utils import query_arrays, make_writer, get_networks, get_local_parser, get_clip_model,get_text_embeddings,get_type,make_init_dict, get_prompts, generate_gpt_prompts
 
 class Wrapper(nn.Module):
     def __init__(self, args, clip_model, autoencoder, latent_flow_model, renderer, resizer, query_array):
@@ -86,7 +86,7 @@ def evaluate_true_voxel(out_3d_hard,args,clip_model,text_features,i,query_array)
     voxel_ims=[]
     num_shapes = out_3d_hard.shape[0]
     n_unique = len(set(query_array))
-    num_shapes = min([n_unique, 3])
+    # num_shapes = min([n_unique, 3])
     for shape in range(num_shapes):
         save_path = '/scratch/mp5847/queries/%s/sample_%s_%s.png' % (args.id,i,shape)
         voxel_save(out_3d_hard[shape].squeeze().detach().cpu(), None, out_file=save_path)
@@ -165,9 +165,14 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     else:
         query_array = [args.query_array]
 
+    #check if file json_name.json exists
+    if not os.path.exists("json_name.json"):
+        print("GPT-3 prompt file not found. Generating prompts...")
+        generate_gpt_prompts(["wineglass","spoon","fork","knife","screwdriver","hammer","pencil","screw","plate","mushroom","umbrella","thimble","sombrero","sandal"])
+    else:
+        print("GPT-3 prompt file found. Skipping prompt generation...")
+    
     query_array = query_array*args.num_views
-
-    text_features = get_text_embeddings(args,clip_model, query_array).detach()
 
     # make directory for saving images with name of the text query using os.makedirs
     if not os.path.exists('/scratch/mp5847/queries/%s' % args.id):
@@ -180,6 +185,8 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     wrapper_optimizer = optim.Adam(wrapper.parameters(), lr=args.learning_rate)
 
     for iter in range(20000):
+        text_features = get_text_embeddings(args,clip_model, query_array).detach()
+
         if args.switch_point is not None and iter == args.switch_point:
             args.renderer = 'nvr+'
             renderer = NVR_Renderer(args, args.device)
@@ -200,7 +207,9 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
             loss, im_samples = wrapper(text_features, iter)
             loss = loss.mean()
                     
-        print(iter, loss)
+        if(iter % 100 == 0):
+            print('iter: ', iter, 'loss: ', loss.item())
+
         loss.backward()
         losses.append(loss.detach().item())
         
@@ -246,6 +255,7 @@ if __name__=="__main__":
     args=get_local_parser()
     print('renderer %s' % args.renderer)
     import sys; sys.stdout.flush()
+
     main(args)
     
     sys.stdout.write(args.writer.log_dir[:5])
