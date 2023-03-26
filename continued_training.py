@@ -174,6 +174,8 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     else:
         query_array = [args.query_array]
     query_array = query_array*args.num_views
+
+    print('query array:',query_array)
     text_features = get_text_embeddings(args,clip_model,query_array).detach()
     # make directory for saving images with name of the text query using os.makedirs
     if not os.path.exists('/scratch/km3888/queries/%s' % args.id):
@@ -241,6 +243,14 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
 
 
 def main(args):
+    helper.set_seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
+
     args.writer = make_writer(args)
     args.id = args.writer.log_dir.split('runs/')[-1]
     
@@ -270,13 +280,6 @@ if __name__=="__main__":
     args=get_local_parser()
     print('renderer %s' % args.renderer)
     import sys; sys.stdout.flush()
-    helper.set_seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    torch.cuda.manual_seed(args.seed)
-    torch.cuda.manual_seed_all(args.seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
 
     main(args)
     
