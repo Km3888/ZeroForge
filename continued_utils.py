@@ -15,8 +15,9 @@ query_arrays = {
                 "three": ["spoon","fork","knife"],
                 "four": ["spoon","fork","wineglass","knife"],
                 "six": ['wineglass','spoon','fork','knife','screwdriver','hammer'],
-                "nine": ['wineglass','spoon','fork','knife','screwdriver','hammer',"soccer ball", "football","plate"],
-                "fourteen": ["wineglass','spoon','fork','knife','screwdriver','hammer","pencil","screw","plate","mushroom","umbrella","thimble","sombrero","sandal"]
+                "nine": ['wineglass','spoon','fork','knife','screwdriver','hammer','soccer ball','football','plate'],
+                "thirteen": ["wineglass","spoon","fork","knife","screwdriver","hammer","pencil","screw","mushroom","umbrella","thimble","sombrero","sandal"],
+                "fourteen": ["wineglass","spoon","fork","knife","screwdriver","hammer","pencil","screw","plate","mushroom","umbrella","thimble","sombrero","sandal"]
 }
 def make_init_dict():
     og_init = {"ae_path":"models/autoencoder/best_iou.pt", "flow_path":"models/prior/best.pt","num_blocks":5,"num_hidden":1024,"emb_dim":128}
@@ -37,7 +38,7 @@ def make_init_dict():
 def make_writer(args):
     if not args.use_tensorboard:
         return None
-    tensorboard_comment = 'q=%s_lr=%s_beta=%s_gpu=%s_baseline=%s_v=%s_k=%s_r=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized,args.num_voxels,args.num_views,args.renderer)
+    tensorboard_comment = 'q=%s_lr=%s_beta=%s_gpu=%s_baseline=%s_v=%s_k=%s_r=%s_s=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized,args.num_voxels,args.num_views,args.renderer,args.seed)
     tensorboard_comment += "_init=%s" % args.init
     if args.switch_point is not None:
         tensorboard_comment += '_s=%s' % args.switch_point
@@ -99,6 +100,10 @@ def get_local_parser(mode="args"):
     parser.add_argument("--init_base",  type=str, default="/scratch/km3888/inits", help='where is the initialization')
     parser.add_argument("--setting", type=int, default=None)
     parser.add_argument("--slurm_id", type=int, default=None)
+    
+    #checkpoint for nvr_renderer
+    parser.add_argument("--nvr_renderer_checkpoint", type=str, default="/scratch/km3888/weights/nvr_plus.pt")
+    parser.add_argument("--query_dir", type=str, default="/scratch/mp5847/queries")
     if mode == "args":
         args = parser.parse_args()
         return args

@@ -241,7 +241,7 @@ def diff_render_voxels_from_blender_camera(voxels,
     
     interpolated_voxels = interpolated_voxels.permute(0,4,1,2,3)
 
-    sampling_tensor = sampling_tensor.expand(batch_size,-1,-1,-1,-1)
+    sampling_tensor = sampling_tensor.expand(batch_size,-1,-1,-1,-1).to(interpolated_voxels.device).to(interpolated_voxels.dtype)
     camera_voxels = torch.nn.functional.grid_sample(interpolated_voxels, sampling_tensor,mode='bilinear')
     camera_voxels = camera_voxels.permute(0,2,3,4,1)
     voxel_image = ea_render(camera_voxels,
@@ -295,7 +295,7 @@ def diff_transform_volume(voxels, transformation_matrix,voxel_size = (128,128,12
     permuted_voxels = voxels.permute(0,4,1,2,3)
     sampling_tensor = torch.tensor(volume_sampling.numpy(),dtype=torch.float32).to(voxels.device)
     sampling_tensor = sampling_tensor.view(-1,128,128,128,3)
-    sampling_tensor = sampling_tensor.expand(voxels.shape[0],-1,-1,-1,-1)
+    sampling_tensor = sampling_tensor.expand(voxels.shape[0],-1,-1,-1,-1).to(permuted_voxels.dtype)
 
     output = torch.nn.functional.grid_sample(permuted_voxels,sampling_tensor)
     output = output.permute(0,2,3,4,1)

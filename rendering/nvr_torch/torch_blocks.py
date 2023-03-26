@@ -24,7 +24,11 @@ class ResBlock2d(nn.Module):
             self.bns.append(self.bn3)
     
     def forward(self,x,extra=False):
+        #hack
+        x = x.to(self.conv1.weight.device)
         shortcut = x
+        assert x.device == self.conv1.weight.device
+        ############################
         x = self.conv1(x)
         if len(self.convs)>2:
             x = x[:,:,1::2,1::2]
