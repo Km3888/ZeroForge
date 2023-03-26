@@ -111,7 +111,7 @@ def do_eval(renderer,query_array,args,clip_model,autoencoder,latent_flow_model,r
     voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard,args,clip_model,text_features,iter,query_array)
     if args.use_tensorboard:
         args.writer.add_scalar('Loss/hard_loss', hard_loss, iter)
-        args.writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
+        # args.writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
 
     if hard_loss<best_hard_loss:
         save_images(rgbs_hard,iter,args,query_array)

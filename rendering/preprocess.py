@@ -3,6 +3,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 import tensorflow as tf
+tf.config.set_visible_devices([], 'GPU')
+visible_devices = tf.config.get_visible_devices()
+for device in visible_devices:
+    assert device.device_type != 'GPU'
 import matplotlib.pyplot as plt
 
 import torchvision.transforms.functional as F
@@ -84,63 +88,6 @@ def make_arrays(angle):
 
     return ground_occupancy,ground_voxel_color,euler_angles_x,euler_angles_y,translation_vector
     
-def estimate_ground_image(object_voxels,angle):
-    ground_occupancy,ground_voxel_color,euler_angles_x,\
-        euler_angles_y,translation_vector = make_arrays(angle)
-    
-    scene_voxels = object_voxels*(1-ground_occupancy) + \
-                    ground_voxel_color*ground_occupancy
-
-    interpolated_voxels = helpers.object_to_world(scene_voxels,
-                                                euler_angles_x,
-                                                euler_angles_y,
-                                                translation_vector)
-    return interpolated_voxels
-
-def og_preprocess(object_voxels,angle=139):
-    object_voxels = process_voxel(object_voxels)
-    
-    interpolated_voxels = estimate_ground_image(object_voxels,angle)
-
-    ground_image, ground_alpha = \
-        helpers.generate_ground_image(IMAGE_SIZE, IMAGE_SIZE, focal, principal_point,
-                            camera_rotation_matrix,
-                            camera_translation_vector[:, :, 0],
-                            GROUND_COLOR)
-    object_rotation_dvr = np.array(np.deg2rad(angle),
-                            dtype=np.float32)
-    object_translation_dvr = np.array(object_translation[..., [0, 2, 1]], 
-                                    dtype=np.float32)
-    object_translation_dvr -= np.array([0, 0, helpers.OBJECT_BOTTOM],
-                                        dtype=np.float32)
-
-    rerendering = \
-    helpers.render_voxels_from_blender_camera(object_voxels,
-                                        object_rotation_dvr,
-                                        object_translation_dvr,
-                                        256, 
-                                        256,
-                                        focal,
-                                        principal_point,
-                                        camera_rotation_matrix,
-                                        camera_translation_vector,
-                                        absorption_factor=1.0,
-                                        cell_size=1.1,
-                                        depth_min=3.0,
-                                        depth_max=5.0,
-                                         frustum_size=(128, 128, 128))
-    rerendering_image, rerendering_alpha = tf.split(rerendering, [3, 1], axis=-1)
-
-    rerendering_image = tf.image.resize(rerendering_image, (256, 256))
-    rerendering_alpha = tf.image.resize(rerendering_alpha, (256, 256))
-
-    BACKGROUND_COLOR = 0.784
-    final_composite = BACKGROUND_COLOR*(1-rerendering_alpha)*(1-ground_alpha) + \
-                    ground_image*(1-rerendering_alpha)*ground_alpha + \
-                    rerendering_image*rerendering_alpha
-    
-    return final_composite,interpolated_voxels
-
 def diff_object_to_world(voxels,
                     euler_angles_x,
                     euler_angles_y,
@@ -359,7 +306,6 @@ class Preprocessor(nn.Module):
         super(Preprocessor, self).__init__()
         
     def forward(self,voxels,orthogonal):
-        print('module:',voxels.device)
         batch_size=voxels.shape[0]
         rotation_x = -np.deg2rad(np.random.uniform(0,360,size=(batch_size,1))).astype(np.float32)
         rotation_y = -np.deg2rad(np.random.uniform(0,360,size=(batch_size,1))).astype(np.float32)
