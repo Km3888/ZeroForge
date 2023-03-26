@@ -7,10 +7,11 @@ import numpy as np
 
 class NVR_Renderer(nn.Module):
     
-    def __init__(self,device):
+    def __init__(self, args, device):
         super(NVR_Renderer, self).__init__()
         self.model = NVR_Plus()
-        self.model.load_state_dict(torch.load('rendering/nvr_torch/nvr_plus.pt',map_location=device))
+        self.model.load_state_dict(torch.load(args.nvr_renderer_checkpoint, map_location=device))
+        self.model = self.model.to(device)
         self.model.eval()
     
     def forward(self,voxels,orthogonal=False):

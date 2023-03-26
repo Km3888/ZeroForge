@@ -100,6 +100,10 @@ def get_local_parser(mode="args"):
     parser.add_argument("--init_base",  type=str, default="/scratch/km3888/inits", help='where is the initialization')
     parser.add_argument("--setting", type=int, default=None)
     parser.add_argument("--slurm_id", type=int, default=None)
+    
+    #checkpoint for nvr_renderer
+    parser.add_argument("--nvr_renderer_checkpoint", type=str, default="/scratch/mp5847/general_clip_forge/nvr_plus.pt")
+    
     if mode == "args":
         args = parser.parse_args()
         return args
