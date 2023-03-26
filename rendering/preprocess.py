@@ -302,7 +302,6 @@ def diff_transform_volume(voxels, transformation_matrix,voxel_size = (128,128,12
     return output
 
 def diff_preprocess(object_voxels,rotation_angles):
-    print('shapes:',object_voxels.shape,rotation_angles.shape)
     object_voxels = diff_load_voxel(object_voxels)
     interpolated_voxels = diff_estimate_ground_image(object_voxels,rotation_angles)
 
