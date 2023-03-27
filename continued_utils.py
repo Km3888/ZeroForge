@@ -174,7 +174,6 @@ def get_local_parser(mode="args"):
     parser.add_argument("--slurm_id", type=int, default=None)
     
     #checkpoint for nvr_renderer
-    parser.add_argument("--nvr_renderer_checkpoint", type=str, default="/scratch/mp5847/general_clip_forge/nvr_plus.pt")
     parser.add_argument("--use_gpt_prompts", action="store_true", help="Use GPT prompts instead of CLIP prompts")
     parser.add_argument("--nvr_renderer_checkpoint", type=str, default="/scratch/km3888/weights/nvr_plus.pt")
     parser.add_argument("--query_dir", type=str, default="/scratch/mp5847/queries")
