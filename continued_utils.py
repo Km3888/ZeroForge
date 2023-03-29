@@ -1,6 +1,7 @@
 import clip
 from torch.utils.tensorboard import SummaryWriter
 from networks import autoencoder, latent_flows
+from networks.autoencoder import ZeroConvDecoder
 from train_autoencoder import parsing
 import torch
 import sys
@@ -65,6 +66,8 @@ def get_networks(args,init_dict):
         checkpoint = torch.load(args.init_base +"/"+ init_dict["ae_path"], map_location=args.device)
         net.load_state_dict(checkpoint['model'])
         net.eval()
+        if args.use_zero_conv:
+            net.encoder.decoder = autoencoder.ZeroConvDecoder(net.encoder.decoder).to(args.device)
         #calculate total parameters in autoencoder and latent flow
         total_params_ae = sum(p.numel() for p in net.parameters() if p.requires_grad)
         total_params_nf = sum(p.numel() for p in latent_flow_network.parameters() if p.requires_grad)
@@ -104,6 +107,8 @@ def get_local_parser(mode="args"):
     #checkpoint for nvr_renderer
     parser.add_argument("--nvr_renderer_checkpoint", type=str, default="/scratch/km3888/weights/nvr_plus.pt")
     parser.add_argument("--query_dir", type=str, default="/scratch/mp5847/queries")
+    
+    parser.add_argument("--use_zero_conv", action="store_true", help="Use zero conv")
     if mode == "args":
         args = parser.parse_args()
         return args
@@ -151,4 +156,3 @@ def get_clip_model(args):
     args.n_px = input_resolution
     args.cond_emb_dim = cond_emb_dim
     return args, clip_model
-
