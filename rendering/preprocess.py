@@ -18,7 +18,6 @@ from tensorflow_graphics.rendering.volumetric import visual_hull
 from tensorflow_graphics.geometry.representation import grid
 from tensorflow_graphics.geometry.transformation import rotation_matrix_3d
 
-from pytorch3d.transforms import euler_angles_to_matrix
 
 if True:
     camera_rotation_matrix= np.array([[ 9.9997330e-01,  7.3080887e-03,  8.9461202e-11],\
@@ -108,8 +107,6 @@ def diff_object_to_world(voxels,
                                 tf.transpose(sampling_points))  # [B, 3, N]
     translation_vector = tf.matmul(transf_matrix, translation_vector)  # [B, 3, 1]
 
-    translation_vector = translation_vector.to(transf_matrix.dtype)
-    translation_vector = torch.matmul(transf_matrix, translation_vector)  # [B, 3, 1]
     sampling_points = sampling_points - translation_vector
 
     sampling_points = tf.linalg.matrix_transpose(sampling_points)
