@@ -82,17 +82,22 @@ def save_images(rgbs_hard,iter,args,query_array):
     # creat a folder for each query array if it doesn't exist
     if not os.path.exists(f'/scratch/km3888/queries/out_images/{args.id}'):
         os.makedirs(f'/scratch/km3888/queries/out_images/{args.id}')
+    already_saved = set()
     for i in range(len(rgbs_hard)):
+        if query_array[i] in already_saved:
+            continue
         rgbs_hard[i] = (rgbs_hard[i] - rgbs_hard[i].min()) / (rgbs_hard[i].max() - rgbs_hard[i].min())
         rgbs_hard[i] = rgbs_hard[i].mul(255).clamp(0, 255).byte()
         rgbs_hard_i = rgbs_hard[i].permute(1,2,0)
         rgbs_hard_i = rgbs_hard_i.cpu().numpy()
         rgbs_hard_i = PIL.Image.fromarray(rgbs_hard_i.astype(np.uint8))
         rgbs_hard_i.save(f'/scratch/km3888/queries/out_images/{args.id}/{iter}_{query_array[i]}.png')
+        already_saved.add(query_array[i])
     
-def do_eval(renderer,query_array,args,clip_model,autoencoder,latent_flow_model,resizer,iter,text_features,best_hard_loss):
+def do_eval(renderer,query_array,args,clip_model,autoencoder,latent_flow_model,resizer,iter,text_features,best_hard_loss,wrapper):    
     with torch.no_grad():
-      out_3d = gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features)
+      _,_,out_3d = wrapper(text_features,None)
+      
     #save out_3d to numpy file
     # with open(f'out_3d/{args.learning_rate}_{args.query_array}/out_3d_{iter}.npy', 'wb') as f:
     #     np.save(f, out_3d.cpu().detach().numpy())
@@ -108,7 +113,7 @@ def do_eval(renderer,query_array,args,clip_model,autoencoder,latent_flow_model,r
         hard_loss = -1*torch.cosine_similarity(text_features,hard_im_embeddings).mean()
         
     #write to tensorboard
-    voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard,args,clip_model,text_features,iter,query_array)
+    # voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard,args,clip_model,text_features,iter,query_array)
     if args.use_tensorboard:
         args.writer.add_scalar('Loss/hard_loss', hard_loss, iter)
         # args.writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
@@ -173,7 +178,6 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
 
     print('query array:',query_array)
     text_features = get_text_embeddings(args,clip_model,query_array).detach()
-
     # make directory for saving images with name of the text query using os.makedirs
     if not os.path.exists(f'{args.query_dir}/{args.id}'):
         os.makedirs(f'{args.query_dir}/{args.id}')   
@@ -194,7 +198,8 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         if not iter%100:
             with torch.cuda.amp.autocast():
                 with torch.no_grad():
-                    do_eval(wrapper.module.renderer, query_array, args, wrapper.module.clip_model, wrapper.module.autoencoder, wrapper.module.latent_flow_model, wrapper.module.resizer, iter, text_features,best_hard_loss)
+                    do_eval(wrapper.module.renderer, query_array, args, wrapper.module.clip_model, \
+                        wrapper.module.autoencoder, wrapper.module.latent_flow_model, wrapper.module.resizer, iter, text_features,best_hard_loss,wrapper)
                     
         if not (iter%5000) and iter!=0:
             # save encoder and latent flow network
@@ -204,7 +209,7 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         wrapper_optimizer.zero_grad()
         
         with torch.cuda.amp.autocast():
-            loss, im_samples = wrapper(text_features, iter)
+            loss, im_samples, _ = wrapper(text_features, iter)
             loss = loss.mean()
                     
         loss.backward()

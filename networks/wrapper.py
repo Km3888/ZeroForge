@@ -43,7 +43,7 @@ class Wrapper(nn.Module):
         losses=-1*torch.cosine_similarity(text_features,im_embs)
 
        
-        return losses, im_samples
+        return losses, im_samples, out_3d
 
     def forward(self, text_features, iter):
         return self.clip_loss(text_features, iter)
