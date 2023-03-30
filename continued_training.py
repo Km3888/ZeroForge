@@ -198,6 +198,7 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         if not iter%100:
             with torch.cuda.amp.autocast():
                 with torch.no_grad():
+                    wrapper.module.autoencoder.eval()
                     do_eval(wrapper.module.renderer, query_array, args, wrapper.module.clip_model, \
                         wrapper.module.autoencoder, wrapper.module.latent_flow_model, wrapper.module.resizer, iter, text_features,best_hard_loss,wrapper)
                     
@@ -209,6 +210,7 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         wrapper_optimizer.zero_grad()
         
         with torch.cuda.amp.autocast():
+            wrapper.module.autoencoder.train()
             loss, im_samples, _ = wrapper(text_features, iter)
             loss = loss.mean()
                     

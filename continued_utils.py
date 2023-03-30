@@ -45,6 +45,8 @@ def make_writer(args):
         tensorboard_comment += '_s=%s' % args.switch_point
     if args.orthogonal:
         tensorboard_comment += '_orthogonal'
+    if args.use_zero_conv:
+        tensorboard_comment += '_zero_conv'
     if args.slurm_id is not None:
         tensorboard_comment = str(args.slurm_id) + "/" + tensorboard_comment
     tensorboard_comment += 'amp'
@@ -67,7 +69,8 @@ def get_networks(args,init_dict):
         net.load_state_dict(checkpoint['model'])
         net.eval()
         if args.use_zero_conv:
-            net.encoder.decoder = autoencoder.ZeroConvDecoder(net.encoder.decoder).to(args.device)
+            net.encoder.decoder = autoencoder.ZeroConvDecoder(net.encoder.decoder)
+            net = net.to(args.device)
         #calculate total parameters in autoencoder and latent flow
         total_params_ae = sum(p.numel() for p in net.parameters() if p.requires_grad)
         total_params_nf = sum(p.numel() for p in latent_flow_network.parameters() if p.requires_grad)

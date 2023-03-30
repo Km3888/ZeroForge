@@ -42,7 +42,6 @@ class Wrapper(nn.Module):
         
         losses=-1*torch.cosine_similarity(text_features,im_embs)
 
-       
         return losses, im_samples, out_3d
 
     def forward(self, text_features, iter):
@@ -50,7 +49,6 @@ class Wrapper(nn.Module):
 
 
 def gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features):
-    autoencoder.train()#TODO don't do this in eval
     latent_flow_model.eval() # has to be in .eval() mode for the sampling to work (which is bad but whatever)
     
     voxel_size = args.num_voxels
