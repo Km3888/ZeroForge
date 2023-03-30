@@ -7,6 +7,11 @@ import torch
 import sys
 import os
 import numpy as np
+import random
+import openai
+import json
+import pdb
+from tqdm import tqdm
 
 query_arrays = {
                 "wineglass": ["wineglass"],
@@ -15,11 +20,78 @@ query_arrays = {
                 "hammer": ["hammer"],
                 "three": ["spoon","fork","knife"],
                 "four": ["spoon","fork","wineglass","knife"],
+                "six": ["wineglass","spoon","fork","knife","screwdriver","hammer"],
+                "nine": ["wineglass","spoon","fork","knife","screwdriver","hammer","soccer ball", "football","plate"],
                 "six": ['wineglass','spoon','fork','knife','screwdriver','hammer'],
                 "nine": ['wineglass','spoon','fork','knife','screwdriver','hammer','soccer ball','football','plate'],
                 "thirteen": ["wineglass","spoon","fork","knife","screwdriver","hammer","pencil","screw","mushroom","umbrella","thimble","sombrero","sandal"],
                 "fourteen": ["wineglass","spoon","fork","knife","screwdriver","hammer","pencil","screw","plate","mushroom","umbrella","thimble","sombrero","sandal"]
 }
+
+prompts_prefix_pool = ["a photo of a ", "a "]
+
+def generate_gpt_prompts(category_list):
+   	
+    #api key is in open_ai_key.txt
+    with open("openai_api_key.txt", "r") as f:
+        openai.api_key = f.read().strip()
+
+    json_name = "json_name.json"
+
+    all_responses = {}
+    vowel_list = ['A', 'E', 'I', 'O', 'U']
+
+    for category in tqdm(category_list):
+        if category[0] in vowel_list:
+            article = "an"
+        else:
+            article = "a"
+
+        prompts = []
+        prompts.append("Describe what " + article + " " + category + " looks like")
+        prompts.append("How can you identify " + article + " " + category + "?")
+        prompts.append("What does " + article + " " + category + " look like?")
+        prompts.append("Describe an image from the internet of " + article + " "  + category)
+        prompts.append("A caption of an image of "  + article + " "  + category + ":")
+
+        all_result = []
+        for curr_prompt in prompts:
+            response = openai.Completion.create(
+                engine="text-davinci-002",
+                prompt=curr_prompt,
+                temperature=.99,
+                max_tokens = 50,
+                n=10,
+                stop="."
+            )
+
+            for r in range(len(response["choices"])):
+                result = response["choices"][r]["text"]
+                all_result.append(result.replace("\n\n", "") + ".")
+
+        all_responses[category] = all_result
+
+    with open(json_name, 'w') as f:
+        json.dump(all_responses, f, indent=4)
+
+def get_prompts(obj, num_prompts, use_gpt):
+    
+    #get prompts for each object
+    prompts = []
+    if use_gpt:
+        with open("json_name.json", "r") as f:
+            promps_dict = json.load(f)
+    
+        for i in range(num_prompts):
+            if(random.random() < 0.5 and use_gpt):
+                prompts.append(random.choice(promps_dict[obj]))
+            else:
+                prompts.append(random.choice(prompts_prefix_pool) + obj)
+    else:
+        for i in range(num_prompts):
+            prompts.append(random.choice(prompts_prefix_pool) + obj)
+    return prompts
+
 def make_init_dict():
     og_init = {"ae_path":"models/autoencoder/best_iou.pt", "flow_path":"models/prior/best.pt","num_blocks":5,"num_hidden":1024,"emb_dim":128}
     init_1 = {"ae_path":"New__Autoencoder_Shapenet_Voxel_Implicit_128_add_noise_1/checkpoints/best_iou.pt", \
@@ -108,6 +180,7 @@ def get_local_parser(mode="args"):
     parser.add_argument("--slurm_id", type=int, default=None)
     
     #checkpoint for nvr_renderer
+    parser.add_argument("--use_gpt_prompts", action="store_true", help="Use GPT prompts instead of CLIP prompts")
     parser.add_argument("--nvr_renderer_checkpoint", type=str, default="/scratch/km3888/weights/nvr_plus.pt")
     parser.add_argument("--query_dir", type=str, default="/scratch/mp5847/queries")
     
@@ -120,11 +193,15 @@ def get_local_parser(mode="args"):
 
 def get_text_embeddings(args,clip_model,query_array):
     # get the text embedding for each query
+    prompts = []
+    for obj in set(query_array):
+        prompts.extend(get_prompts(obj, args.num_views, args.use_gpt_prompts))
+    
     text_tokens = []
     with torch.no_grad():
-        for text in query_array:
+        for text in prompts:
             text_tokens.append(clip.tokenize([text]).detach().to(args.device))
-        
+    
     text_tokens = torch.cat(text_tokens,dim=0)
     text_features = clip_model.encode_text(text_tokens)
     text_features = text_features / text_features.norm(dim=-1, keepdim=True)

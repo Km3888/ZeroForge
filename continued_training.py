@@ -36,9 +36,7 @@ import numpy as np
 import torch.nn as nn
 import random 
 
-from continued_utils import query_arrays, make_writer, get_networks, get_local_parser, get_clip_model,get_text_embeddings,get_type,make_init_dict
-from utils import helper
-
+from continued_utils import query_arrays, make_writer, get_networks, get_local_parser, get_clip_model,get_text_embeddings,get_type,make_init_dict, get_prompts, generate_gpt_prompts
 import PIL
 
        
@@ -173,6 +171,20 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         query_array = query_arrays[args.query_array]
     else:
         query_array = [args.query_array]
+
+    #check if file json_name.json exists
+    if not os.path.exists("json_name.json"):
+        print("GPT-3 prompt file not found. Generating prompts...")
+        generate_gpt_prompts(["wineglass","spoon","fork","knife","screwdriver","hammer","pencil","screw","plate","mushroom","umbrella","thimble","sombrero","sandal"])
+    else:
+        print("GPT-3 prompt file found. Skipping prompt generation...")
+    
+    #check if file json_name.json exists
+    if not os.path.exists("json_name.json"):
+        print("GPT-3 prompt file not found. Generating prompts...")
+        generate_gpt_prompts(["wineglass","spoon","fork","knife","screwdriver","hammer","pencil","screw","plate","mushroom","umbrella","thimble","sombrero","sandal"])
+    else:
+        print("GPT-3 prompt file found. Skipping prompt generation...")
     
     query_array = query_array*args.num_views
 
@@ -191,6 +203,9 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     wrapper_optimizer = optim.Adam(wrapper.parameters(), lr=args.learning_rate)
 
     for iter in range(20000):
+        if args.use_gpt_prompts:
+            text_features = get_text_embeddings(args,clip_model, query_array).detach()
+
         if args.switch_point is not None and iter == args.switch_point:
             args.renderer = 'nvr+'
             renderer = NVR_Renderer(args, args.device)
@@ -214,6 +229,9 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
             loss, im_samples, _ = wrapper(text_features, iter)
             loss = loss.mean()
                     
+        if(iter % 100 == 0):
+            print('iter: ', iter, 'loss: ', loss.item())
+
         loss.backward()
         losses.append(loss.detach().item())
         
