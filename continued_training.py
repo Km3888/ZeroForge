@@ -179,13 +179,6 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     else:
         print("GPT-3 prompt file found. Skipping prompt generation...")
     
-    #check if file json_name.json exists
-    if not os.path.exists("json_name.json"):
-        print("GPT-3 prompt file not found. Generating prompts...")
-        generate_gpt_prompts(["wineglass","spoon","fork","knife","screwdriver","hammer","pencil","screw","plate","mushroom","umbrella","thimble","sombrero","sandal"])
-    else:
-        print("GPT-3 prompt file found. Skipping prompt generation...")
-    
     query_array = query_array*args.num_views
 
     print('query array:',query_array)
