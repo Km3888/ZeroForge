@@ -1,3 +1,4 @@
+import copy
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -166,7 +167,7 @@ class Occ_Simple_Decoder(nn.Module):
                  hidden_size=128, leaky=False, last_sig=False):
         super().__init__()
         self.z_dim = z_dim
-
+        self.hidden_size = hidden_size
         # Submodules
         self.fc_p = nn.Linear(point_dim, hidden_size)
 
@@ -178,6 +179,8 @@ class Occ_Simple_Decoder(nn.Module):
         self.block3 = ResnetBlockFC(hidden_size)
         self.block4 = ResnetBlockFC(hidden_size)
 
+        self.blocks = [self.block0, self.block1, self.block2, self.block3, self.block4]
+        
         self.fc_out = nn.Linear(hidden_size, 1)
 
         if not leaky:
@@ -212,6 +215,41 @@ class Occ_Simple_Decoder(nn.Module):
         return out           
 ####################################################################################################
 ####################################################################################################
+
+class ZeroConvDecoder(nn.Module):
+    
+    def __init__(self,trained):
+        super().__init__()
+        self.trained_model = trained
+        self.hidden_size = trained.hidden_size
+        
+        self.copies = []
+        for i in range(len(trained.blocks)):
+            self.copies.append(copy.deepcopy(self.trained_model.blocks[i]))
+            for param in self.trained_model.blocks[i].parameters():
+                param.requires_grad = False
+        self.copies = nn.ModuleList(self.copies)
+        self.zero_fcs = nn.ModuleList([nn.Linear(self.hidden_size,self.hidden_size,1) for i in range(5)])
+        for i in range(len(trained.blocks)):
+            self.zero_fcs[i].weight.data.zero_()
+            self.zero_fcs[i].bias.data.zero_()
+        
+    def forward(self, p, z):
+        batch_size, T, D = p.size()
+        
+        net = self.trained_model.fc_p(p)
+
+        net_z = self.trained_model.fc_z(z).unsqueeze(1)
+        net = net + net_z
+        
+        for i,block in enumerate(self.copies):
+            new_version = self.zero_fcs[i](block(net))
+            net = self.trained_model.blocks[i](net) + new_version
+                    
+        out = self.trained_model.fc_out(self.trained_model.actvn(net))
+        out = out.squeeze(-1)
+        
+        return out
 
 class get_model(nn.Module):
     def __init__(self, args):
