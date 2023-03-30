@@ -9,7 +9,7 @@ import torch
 import torch.optim as optim
 
 from networks import autoencoder, latent_flows
-from networks.wrapper import Wrapper, gen_shapes
+from networks.wrapper import Wrapper
 
 import clip
 from test_post_clip import voxel_save
@@ -41,7 +41,6 @@ import PIL
 
        
 def evaluate_true_voxel(out_3d_hard,args,clip_model,text_features,i,query_array):
-    
     # code for saving the "true" voxel image
     voxel_ims=[]
     num_shapes = out_3d_hard.shape[0]
@@ -92,18 +91,12 @@ def save_images(rgbs_hard,iter,args,query_array):
         rgbs_hard_i.save(f'/scratch/km3888/queries/out_images/{args.id}/{iter}_{query_array[i]}.png')
         already_saved.add(query_array[i])
     
-def do_eval(renderer,query_array,args,clip_model,autoencoder,latent_flow_model,resizer,iter,text_features,best_hard_loss,wrapper):    
+def do_eval(query_array,args,iter,text_features,best_hard_loss,wrapper):    
     with torch.no_grad():
-      _,_,out_3d = wrapper(text_features,None)
-      
+      out_3d_hard, rgbs_hard, hard_im_embeddings = wrapper(text_features,hard=True)
     #save out_3d to numpy file
     # with open(f'out_3d/{args.learning_rate}_{args.query_array}/out_3d_{iter}.npy', 'wb') as f:
     #     np.save(f, out_3d.cpu().detach().numpy())
-    out_3d_hard = out_3d.detach() > args.threshold
-    # rgbs_hard = renderer.render(out_3d_hard.float(),orthogonal=args.orthogonal).double().to(args.device)
-    rgbs_hard = renderer(out_3d_hard.float(),orthogonal=args.orthogonal).to(args.device)
-    rgbs_hard = resizer(rgbs_hard)
-    hard_im_embeddings = clip_model.encode_image(rgbs_hard)
     if args.renderer=='ea':
         #baseline renderer gives 3 dimensions
         hard_loss = -1*torch.cosine_similarity(text_features.unsqueeze(1).expand(-1,3,-1).reshape(-1,512),hard_im_embeddings).mean()
@@ -120,14 +113,6 @@ def do_eval(renderer,query_array,args,clip_model,autoencoder,latent_flow_model,r
         save_images(rgbs_hard,iter,args,query_array)
         best_hard_loss = hard_loss
     
-    rgbs_hard.to("cpu")
-    out_3d_hard.to("cpu")
-    out_3d.to("cpu")
-    hard_loss.to("cpu")
-    del rgbs_hard
-    del out_3d_hard
-    del out_3d
-    del hard_loss
     gc.collect()
     torch.cuda.empty_cache()
     
@@ -163,6 +148,10 @@ def evaluate_true_voxel(out_3d_hard,args,clip_model,text_features,i,query_array)
     voxel_similarity = torch.cosine_similarity(text_features[:num_shapes], voxel_image_embedding).mean()
     return voxel_similarity
 
+def clip_loss(im_embs,text_features,args):
+    loss = -1*torch.cosine_similarity(text_features,im_embs).mean()
+    return loss
+
 def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):    
     resizer = T.Resize(224)
 
@@ -185,7 +174,7 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     text_features = get_text_embeddings(args,clip_model,query_array).detach()
     # make directory for saving images with name of the text query using os.makedirs
     if not os.path.exists(f'{args.query_dir}/{args.id}'):
-        os.makedirs(f'{args.query_dir}/{args.id}')   
+        os.makedirs(f'{args.query_dir}/{args.id}')
 
     wrapper = Wrapper(args, clip_model, autoencoder, latent_flow_model, renderer, resizer, query_array)
 
@@ -207,8 +196,7 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
             with torch.cuda.amp.autocast():
                 with torch.no_grad():
                     wrapper.module.autoencoder.eval()
-                    do_eval(wrapper.module.renderer, query_array, args, wrapper.module.clip_model, \
-                        wrapper.module.autoencoder, wrapper.module.latent_flow_model, wrapper.module.resizer, iter, text_features,best_hard_loss,wrapper)
+                    do_eval(query_array, args,iter, text_features,best_hard_loss,wrapper)
                     
         if not (iter%5000) and iter!=0:
             # save encoder and latent flow network
@@ -219,8 +207,8 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         
         with torch.cuda.amp.autocast():
             wrapper.module.autoencoder.train()
-            loss, im_samples, _ = wrapper(text_features, iter)
-            loss = loss.mean()
+            out_3d, im_samples, im_embs = wrapper(text_features)
+            loss = clip_loss(im_embs, text_features, args)
                     
         if(iter % 100 == 0):
             print('iter: ', iter, 'loss: ', loss.item())

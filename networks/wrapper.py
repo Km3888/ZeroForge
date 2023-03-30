@@ -26,12 +26,26 @@ class Wrapper(nn.Module):
         self.query_array = query_array
         self.args = args
 
-    def clip_loss(self, text_features, iter):
-        # out_3d = self.gen_shapes(text_features)
-        out_3d = gen_shapes(self.query_array, self.args, self.autoencoder, self.latent_flow_model, text_features)
-        out_3d_soft = torch.sigmoid(self.args.beta*(out_3d-self.args.threshold))#.clone()
+    def forward(self, text_features,hard=False):
+        # def gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features):
+        self.latent_flow_model.eval() # has to be in .eval() mode for the sampling to work (which is bad but whatever)
+        
+        voxel_size = self.args.num_voxels
+        batch_size = text_features.shape[0]
+                    
+        shape = (voxel_size, voxel_size, voxel_size)
+        p = visualization.make_3d_grid([-0.5] * 3, [+0.5] * 3, shape).type(torch.FloatTensor).to(text_features.device)
+        query_points = p.expand(batch_size, *p.size())
+            
+        noise = torch.Tensor(batch_size, self.args.emb_dims).normal_().to(self.args.device)
+        decoder_embs = self.latent_flow_model.sample(text_features.device,batch_size, noise=noise, cond_inputs=text_features)
+        out_3d = self.autoencoder(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size)
+        if hard:
+            out_3d_bin = (out_3d.detach() > self.args.threshold).float()
+        else:
+            out_3d_bin = torch.sigmoid(self.args.beta*(out_3d-self.args.threshold))#.clone()
 
-        ims = self.renderer(out_3d_soft,orthogonal=self.args.orthogonal).double()
+        ims = self.renderer(out_3d_bin,orthogonal=self.args.orthogonal).double()
         ims = self.resizer(ims)
         im_samples = ims.view(-1,3,224,224)
         
@@ -40,28 +54,4 @@ class Wrapper(nn.Module):
             #baseline renderer gives 3 dimensions
             text_features=text_features.unsqueeze(1).expand(-1,3,-1).reshape(-1,512)
         
-        losses=-1*torch.cosine_similarity(text_features,im_embs)
-
-        return losses, im_samples, out_3d
-
-    def forward(self, text_features, iter):
-        return self.clip_loss(text_features, iter)
-
-
-def gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features):
-    latent_flow_model.eval() # has to be in .eval() mode for the sampling to work (which is bad but whatever)
-    
-    voxel_size = args.num_voxels
-    batch_size = len(query_array)
-    
-    #hard code for now
-    batch_size = len(text_features)
-        
-    shape = (voxel_size, voxel_size, voxel_size)
-    p = visualization.make_3d_grid([-0.5] * 3, [+0.5] * 3, shape).type(torch.FloatTensor).to(text_features.device)
-    query_points = p.expand(batch_size, *p.size())
-        
-    noise = torch.Tensor(batch_size, args.emb_dims).normal_().to(args.device)
-    decoder_embs = latent_flow_model.sample(text_features.device,batch_size, noise=noise, cond_inputs=text_features)
-    out_3d = autoencoder(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size)
-    return out_3d
+        return out_3d_bin, im_samples, im_embs
