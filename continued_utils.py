@@ -119,9 +119,11 @@ def make_writer(args):
         tensorboard_comment += '_orthogonal'
     if args.use_zero_conv:
         tensorboard_comment += '_zero_conv'
+    if args.contrast_lambda > 0:
+        tensorboard_comment += '_c=%s' % args.contrast_lambda
     if args.slurm_id is not None:
         tensorboard_comment = str(args.slurm_id) + "/" + tensorboard_comment
-    tensorboard_comment += 'amp'
+    tensorboard_comment += '_amp'
     log_dir = '/scratch/km3888/clip_forge_runs/' + tensorboard_comment
     assert args.renderer in ['ea','nvr+']
     return SummaryWriter(log_dir=log_dir)
@@ -183,6 +185,7 @@ def get_local_parser(mode="args"):
     parser.add_argument("--use_gpt_prompts", action="store_true", help="Use GPT prompts instead of CLIP prompts")
     parser.add_argument("--nvr_renderer_checkpoint", type=str, default="/scratch/km3888/weights/nvr_plus.pt")
     parser.add_argument("--query_dir", type=str, default="/scratch/mp5847/queries")
+    parser.add_argument("--contrast_lambda",type=float,default=0.1)
     
     parser.add_argument("--use_zero_conv", action="store_true", help="Use zero conv")
     if mode == "args":

@@ -150,6 +150,16 @@ def evaluate_true_voxel(out_3d_hard,args,clip_model,text_features,i,query_array)
 
 def clip_loss(im_embs,text_features,args):
     loss = -1*torch.cosine_similarity(text_features,im_embs).mean()
+    
+    #normalize im_embs
+    im_embs = im_embs / im_embs.norm(dim=-1, keepdim=True)
+    
+    #compute all pair cosine similarity between im_embs and text_features
+    cos_sim = torch.mm(im_embs, text_features.t())
+    probs = torch.softmax(cos_sim, dim=1)
+    contrast_loss = -1*probs.diag().mean()
+    #compute loss
+    loss += contrast_loss * args.contrast_lambda
     return loss
 
 def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):    
