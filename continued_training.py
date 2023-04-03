@@ -159,8 +159,8 @@ def clip_loss(im_embs,text_features,args):
     probs = torch.softmax(cos_sim, dim=1)
     contrast_loss = -1*probs.diag().mean()
     #compute loss
-    loss += contrast_loss * args.contrast_lambda
-    return loss
+    train_loss = loss + contrast_loss * args.contrast_lambda
+    return train_loss,loss
 
 def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):    
     resizer = T.Resize(224)
@@ -202,7 +202,7 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
             args.renderer = 'nvr+'
             renderer = NVR_Renderer(args, args.device)
 
-        if not iter%100:
+        if not iter%500:
             with torch.cuda.amp.autocast():
                 with torch.no_grad():
                     wrapper.module.autoencoder.eval()
@@ -218,8 +218,8 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         with torch.cuda.amp.autocast():
             wrapper.module.autoencoder.train()
             out_3d, im_samples, im_embs = wrapper(text_features)
-            loss = clip_loss(im_embs, text_features, args)
-                    
+            loss,strict_loss = clip_loss(im_embs, text_features, args)
+            #strict loss doesn't include contrative term
         if(iter % 100 == 0):
             print('iter: ', iter, 'loss: ', loss.item())
 
@@ -230,7 +230,8 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
             if not iter%50:
                 grid = torchvision.utils.make_grid(im_samples, nrow=3)
                 args.writer.add_image('images', grid, iter)
-            args.writer.add_scalar('Loss/train', loss.item(), iter)            
+            args.writer.add_scalar('Loss/train', loss.item(), iter)
+            args.writer.add_scalar('Loss/strict_train_loss',strict_loss.item(),iter)          
         
         wrapper_optimizer.step()
         if not iter:
