@@ -199,6 +199,7 @@ def get_local_parser(mode="args"):
     parser.add_argument("--use_zero_conv", action="store_true", help="Use zero conv")
     parser.add_argument("--kl_lambda", type=float, default=0.05, help="KL lambda")
     parser.add_argument("--radius",type=float,default=0.75,help="radius for sphere prior")
+    parser.add_argument("--background",type=str,default="default",help="background color")
     if mode == "args":
         args = parser.parse_args()
         return args

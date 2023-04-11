@@ -255,7 +255,7 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         
         with torch.cuda.amp.autocast():
             wrapper.module.autoencoder.train()
-            out_3d, im_samples, im_embs = wrapper(text_features)
+            out_3d, im_samples, im_embs = wrapper(text_features, background = args.background)
             loss,strict_loss = clip_loss(im_embs, text_features, args, query_array)
             kl_penalty = calc_kl(out_3d, spherical_prior)
             loss += kl_penalty * args.kl_lambda
