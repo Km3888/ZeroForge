@@ -178,6 +178,26 @@ def clip_loss(im_embs,text_features,args,query_array):
     train_loss = loss + contrast_loss * args.contrast_lambda
     return train_loss,loss
 
+def calc_kl(out_3d,sphere):
+    eps = 01e-04
+    loss_kl = torch.log(sphere * (sphere/(out_3d+eps)) + eps).mean()
+    return loss_kl
+
+def make_sphere(args):
+    num_voxels = args.num_voxels
+    grid_xyz = torch.stack(torch.meshgrid(
+        torch.linspace(-1, 1, num_voxels),
+        torch.linspace(-1, 1, num_voxels),
+        torch.linspace(-1, 1, num_voxels),
+    ), -1)
+    with torch.no_grad():
+        radius = torch.sqrt((grid_xyz.unsqueeze(0).unsqueeze(1) ** 2).sum(-1)).squeeze()
+        radius_mask = radius <= 1.0
+        spherical_prior = torch.zeros((num_voxels,num_voxels,num_voxels)).to(args.device)
+        spherical_prior[radius_mask] = 1.0
+        spherical_prior[~radius_mask] = 0.0
+    return spherical_prior
+
 def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):    
     resizer = T.Resize(224)
 
@@ -210,6 +230,8 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     best_hard_loss = float('inf')
     wrapper_optimizer = optim.Adam(wrapper.parameters(), lr=args.learning_rate)
 
+    spherical_prior = make_sphere(args)
+    
     for iter in range(20000):
         if args.use_gpt_prompts:
             text_features = get_text_embeddings(args,clip_model, query_array).detach()
@@ -235,6 +257,8 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
             wrapper.module.autoencoder.train()
             out_3d, im_samples, im_embs = wrapper(text_features)
             loss,strict_loss = clip_loss(im_embs, text_features, args, query_array)
+            kl_penalty = calc_kl(out_3d, spherical_prior)
+            loss += kl_penalty * args.kl_lambda
             #strict loss doesn't include contrative term
         if(iter % 100 == 0):
             print('iter: ', iter, 'loss: ', loss.item())
