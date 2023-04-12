@@ -18,6 +18,7 @@ query_arrays = {
                 "spoon": ["spoon"],
                 "fork": ["fork"],
                 "hammer": ["hammer"],
+                "two": ["spoon","fork"],
                 "three": ["spoon","fork","knife"],
                 "four": ["spoon","fork","wineglass","knife"],
                 "six": ["wineglass","spoon","fork","knife","screwdriver","hammer"],
@@ -121,9 +122,14 @@ def make_writer(args):
         tensorboard_comment += '_zero_conv'
     if args.contrast_lambda > 0:
         tensorboard_comment += '_c=%s' % args.contrast_lambda
+    if args.all_contrast:
+        tensorboard_comment += '_all_contrast'
+    if args.log_contrast:
+        tensorboard_comment += '_log'
+    if args.improved_contrast:
+        tensorboard_comment + '_improved'
     if args.slurm_id is not None:
         tensorboard_comment = str(args.slurm_id) + "/" + tensorboard_comment
-    tensorboard_comment += '_amp'
     log_dir = '/scratch/km3888/clip_forge_runs/' + tensorboard_comment
     assert args.renderer in ['ea','nvr+']
     return SummaryWriter(log_dir=log_dir)
@@ -186,6 +192,9 @@ def get_local_parser(mode="args"):
     parser.add_argument("--nvr_renderer_checkpoint", type=str, default="/scratch/km3888/weights/nvr_plus.pt")
     parser.add_argument("--query_dir", type=str, default="/scratch/mp5847/queries")
     parser.add_argument("--contrast_lambda",type=float,default=0.1)
+    parser.add_argument("--log_contrast",action="store_true",help="log contrast")
+    parser.add_argument("--all_contrast",action="store_true",help="all contrast")
+    parser.add_argument("--improved_contrast",action="store_true",help="improved contrast")
     
     parser.add_argument("--use_zero_conv", action="store_true", help="Use zero conv")
     if mode == "args":

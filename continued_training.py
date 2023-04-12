@@ -148,7 +148,7 @@ def evaluate_true_voxel(out_3d_hard,args,clip_model,text_features,i,query_array)
     voxel_similarity = torch.cosine_similarity(text_features[:num_shapes], voxel_image_embedding).mean()
     return voxel_similarity
 
-def clip_loss(im_embs,text_features,args):
+def clip_loss(im_embs,text_features,args,query_array):
     loss = -1*torch.cosine_similarity(text_features,im_embs).mean()
     
     #normalize im_embs
@@ -157,8 +157,24 @@ def clip_loss(im_embs,text_features,args):
     #compute all pair cosine similarity between im_embs and text_features
     cos_sim = torch.mm(im_embs, text_features.t())
     probs = torch.softmax(cos_sim, dim=1)
-    contrast_loss = -1*probs.diag().mean()
+    diag_terms = probs.diag()
+    if args.improved_contrast:
+        k = len(set(query_array))
+        n = probs.shape[0]
+        mask = torch.zeros_like(probs)
+        upper_diag = torch.diag(torch.ones(n - k), diagonal=k).to(args.device)
+        lower_diag = torch.diag(torch.ones(n - k), diagonal=-k).to(args.device)
+        mask = mask +  upper_diag + lower_diag
+        mask = 1 - mask
+        mask = mask.to(args.device)
+        probs = probs * mask
+    
+    if args.log_contrast:
+        diag_terms = torch.log(diag_terms)
+    contrast_loss = -1*diag_terms.mean()
     #compute loss
+    if args.all_contrast:
+        return contrast_loss,contrast_loss
     train_loss = loss + contrast_loss * args.contrast_lambda
     return train_loss,loss
 
@@ -218,7 +234,7 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         with torch.cuda.amp.autocast():
             wrapper.module.autoencoder.train()
             out_3d, im_samples, im_embs = wrapper(text_features)
-            loss,strict_loss = clip_loss(im_embs, text_features, args)
+            loss,strict_loss = clip_loss(im_embs, text_features, args, query_array)
             #strict loss doesn't include contrative term
         if(iter % 100 == 0):
             print('iter: ', iter, 'loss: ', loss.item())
