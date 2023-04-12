@@ -1,4 +1,5 @@
 import argparse
+import random
 import numpy as np
 import torch
 import torch.nn as nn
@@ -18,6 +19,8 @@ from tensorflow_graphics.rendering.volumetric import visual_hull
 from tensorflow_graphics.geometry.representation import grid
 from tensorflow_graphics.geometry.transformation import rotation_matrix_3d
 
+import optvis
+import jax
 
 if True:
     camera_rotation_matrix= np.array([[ 9.9997330e-01,  7.3080887e-03,  8.9461202e-11],\
@@ -251,22 +254,27 @@ def diff_transform_volume(voxels, transformation_matrix,voxel_size = (128,128,12
     output = output.permute(0,2,3,4,1)
     return output
 
-def diff_preprocess(object_voxels,rotation_angles):
+def diff_preprocess(object_voxels,rotation_angles,background='default'):
     object_voxels = diff_load_voxel(object_voxels)
     interpolated_voxels = diff_estimate_ground_image(object_voxels,rotation_angles)
 
+    background = 'gaussian'
     ground_image, ground_alpha = \
         helpers.generate_ground_image(IMAGE_SIZE, IMAGE_SIZE, focal, principal_point,
                             camera_rotation_matrix,
                             camera_translation_vector[:, :, 0],
                             GROUND_COLOR)
-    
     ground_image = torch.tensor(ground_image.numpy(),dtype=torch.float32).to(object_voxels.device)
     ground_alpha = torch.tensor(ground_alpha.numpy(),dtype=torch.float32).to(object_voxels.device)
     ground_image = ground_image.permute(0,3,1,2)
     ground_alpha = ground_alpha.permute(0,3,1,2)
-    
-    
+    if background == 'gaussian':
+        seed = random.randint(0, 1000000)
+        fft_bg = optvis.image_sample(
+        jax.random.PRNGKey(seed), [1, 256,256, 3], sd=0.2, decay_power=1.5)[0]
+        ground_image = torch.from_numpy(np.array(fft_bg)).to(object_voxels.device)
+        ground_image = ground_image.unsqueeze(0).permute(0,3,1,2)
+            
     object_translation_dvr = np.array(object_translation[..., [0, 2, 1]], 
                                     dtype=np.float32)
     object_translation_dvr -= np.array([0, 0, helpers.OBJECT_BOTTOM],
