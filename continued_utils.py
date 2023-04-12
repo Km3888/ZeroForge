@@ -197,8 +197,8 @@ def get_local_parser(mode="args"):
 def get_text_embeddings(args,clip_model,query_array):
     # get the text embedding for each query
     prompts = []
-    for obj in set(query_array):
-        prompts.extend(get_prompts(obj, args.num_views, args.use_gpt_prompts))
+    for obj in query_array:
+        prompts.extend(get_prompts(obj, 1, args.use_gpt_prompts))
     
     text_tokens = []
     with torch.no_grad():
