@@ -146,7 +146,7 @@ def diff_estimate_ground_image(object_voxels,angle):
     
 def diff_load_voxel(voxel):
     edited_voxel = torch.transpose(voxel,2,1)
-    edited_voxel = torch.flip(edited_voxel,[0])
+    # edited_voxel = torch.flip(edited_voxel,[0])
     edited_voxel = edited_voxel.view(-1,128,128,128,1)
     
     
@@ -258,7 +258,6 @@ def diff_preprocess(object_voxels,rotation_angles,background='default'):
     object_voxels = diff_load_voxel(object_voxels)
     interpolated_voxels = diff_estimate_ground_image(object_voxels,rotation_angles)
 
-    background = 'gaussian'
     ground_image, ground_alpha = \
         helpers.generate_ground_image(IMAGE_SIZE, IMAGE_SIZE, focal, principal_point,
                             camera_rotation_matrix,
