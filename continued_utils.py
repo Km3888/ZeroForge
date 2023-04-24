@@ -14,6 +14,8 @@ import pdb
 from tqdm import tqdm
 
 query_arrays = {
+                "with_original" : ["spoon","fork","wineglass","knife","chair","airplane"],
+                "orthogonal" : ["round spoon","donut","barbell","american football"],
                 "wineglass": ["wineglass"],
                 "spoon": ["spoon"],
                 "fork": ["fork"],
@@ -127,7 +129,11 @@ def make_writer(args):
     if args.log_contrast:
         tensorboard_comment += '_log'
     if args.improved_contrast:
-        tensorboard_comment + '_improved'
+        tensorboard_comment += '_improved'
+    if args.background != "default":
+        tensorboard_comment += '_bg=%s' % args.background
+    if args.temp!=1:
+        tensorboard_comment += '_temp=%s' % args.temp
     if args.slurm_id is not None:
         tensorboard_comment = str(args.slurm_id) + "/" + tensorboard_comment
     log_dir = '/scratch/km3888/clip_forge_runs/' + tensorboard_comment
@@ -183,7 +189,7 @@ def get_local_parser(mode="args"):
     parser.add_argument("--renderer",  type=str, default='ea')
     parser.add_argument("--orthogonal",  type=bool, default=False, help='use orthogonal views')
     parser.add_argument("--init",  type=str, default="og_init", help='what is the initialization')
-    parser.add_argument("--init_base",  type=str, default="/scratch/km3888/inits", help='where is the initialization')
+    parser.add_argument("--init_base",  type=str, default=" ", help='where is the initialization')
     parser.add_argument("--setting", type=int, default=None)
     parser.add_argument("--slurm_id", type=int, default=None)
     
@@ -195,9 +201,10 @@ def get_local_parser(mode="args"):
     parser.add_argument("--log_contrast",action="store_true",help="log contrast")
     parser.add_argument("--all_contrast",action="store_true",help="all contrast")
     parser.add_argument("--improved_contrast",action="store_true",help="improved contrast")
+    parser.add_argument("--temp",type=float,default=1)
     
     parser.add_argument("--use_zero_conv", action="store_true", help="Use zero conv")
-    parser.add_argument("--kl_lambda", type=float, default=0.05, help="KL lambda")
+    parser.add_argument("--kl_lambda", type=float, default=0.00, help="KL lambda")
     parser.add_argument("--radius",type=float,default=0.75,help="radius for sphere prior")
     parser.add_argument("--background",type=str,default="default",help="background color")
     if mode == "args":
