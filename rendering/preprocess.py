@@ -257,6 +257,7 @@ def diff_transform_volume(voxels, transformation_matrix,voxel_size = (128,128,12
 def diff_preprocess(object_voxels,rotation_angles,background='default'):
     object_voxels = diff_load_voxel(object_voxels)
     interpolated_voxels = diff_estimate_ground_image(object_voxels,rotation_angles)
+    batch_size = interpolated_voxels.shape[0]
 
     ground_image, ground_alpha = \
         helpers.generate_ground_image(IMAGE_SIZE, IMAGE_SIZE, focal, principal_point,
@@ -270,9 +271,16 @@ def diff_preprocess(object_voxels,rotation_angles,background='default'):
     if background == 'gaussian':
         seed = random.randint(0, 1000000)
         fft_bg = optvis.image_sample(
-        jax.random.PRNGKey(seed), [1, 256,256, 3], sd=0.2, decay_power=1.5)[0]
-        ground_image = torch.from_numpy(np.array(fft_bg)).to(object_voxels.device)
-        ground_image = ground_image.unsqueeze(0).permute(0,3,1,2)
+        jax.random.PRNGKey(seed), [batch_size, 256, 256, 3], sd=0.2, decay_power=1.5)[0]
+        backgrounds = []
+        for i in range(batch_size):
+            seed = random.randint(0, 1000000)
+            fft_bg = optvis.image_sample(
+            jax.random.PRNGKey(seed), [batch_size, 256, 256, 3], sd=0.2, decay_power=1.5)[0]
+            backgrounds.append(np.array(fft_bg))
+        backgrounds_np = np.stack(backgrounds)
+        ground_image = torch.from_numpy(np.array(backgrounds_np)).to(object_voxels.device)
+        ground_image = ground_image.permute(0,3,1,2)
             
     object_translation_dvr = np.array(object_translation[..., [0, 2, 1]], 
                                     dtype=np.float32)
