@@ -156,7 +156,7 @@ def clip_loss(im_embs,text_features,args,query_array):
     
     #compute all pair cosine similarity between im_embs and text_features
     cos_sim = torch.mm(im_embs, text_features.t())
-    probs = torch.softmax(cos_sim, dim=1)
+    probs = torch.log(torch.softmax(args.temp*cos_sim, dim=1))
     diag_terms = probs.diag()
     if args.improved_contrast:
         k = len(set(query_array))
