@@ -179,12 +179,20 @@ def clip_loss(im_embs,text_features,args,query_array):
     if args.all_contrast:
         return contrast_loss,contrast_loss
     train_loss = loss + contrast_loss * args.contrast_lambda
+    if args.std_coeff>0:
+        std_loss = calc_std(im_embs)
+        train_loss = train_loss + args.std_coeff * std_loss
     return train_loss,loss
 
 def calc_kl(out_3d,sphere):
     eps = 01e-04
     loss_kl = torch.log(sphere * (sphere/(out_3d+eps)) + eps).mean()
     return loss_kl
+
+def calc_std(im_embs):
+    std_ims = torch.sqrt(im_embs.var(dim=0)+0.0001)
+    std_loss = torch.mean(std_ims)
+    return std_loss
 
 def make_sphere(args):
     num_voxels = args.num_voxels
