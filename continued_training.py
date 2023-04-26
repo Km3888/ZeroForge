@@ -160,9 +160,11 @@ def clip_loss(im_embs,text_features,args,query_array):
         k = len(set(query_array))
         n = cos_sim.shape[0]
         mask = torch.zeros_like(cos_sim)
-        upper_diag = torch.diag(torch.ones(n - k), diagonal=k).to(args.device)
-        lower_diag = torch.diag(torch.ones(n - k), diagonal=-k).to(args.device)
-        mask = mask +  upper_diag + lower_diag
+
+        for i in range(1,args.num_views):
+            upper_diag = torch.diag(torch.ones(n - k*i), diagonal=k*i).to(args.device)
+            lower_diag = torch.diag(torch.ones(n - k*i), diagonal=-1*k*i).to(args.device)
+            mask = mask +  upper_diag + lower_diag
         mask = 1 - mask
         mask = mask.to(args.device)
         cos_sim = cos_sim * mask
