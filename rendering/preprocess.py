@@ -281,6 +281,7 @@ def diff_preprocess(object_voxels,rotation_angles,background='default'):
         backgrounds_np = np.stack(backgrounds)
         ground_image = torch.from_numpy(np.array(backgrounds_np)).to(object_voxels.device)
         ground_image = ground_image.permute(0,3,1,2)
+        ground_alpha = torch.ones_like(ground_image)
             
     object_translation_dvr = np.array(object_translation[..., [0, 2, 1]], 
                                     dtype=np.float32)
