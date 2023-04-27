@@ -191,7 +191,7 @@ def calc_kl(out_3d,sphere):
 
 def calc_std(im_embs):
     std_ims = torch.sqrt(im_embs.var(dim=0)+0.0001)
-    std_loss = torch.mean(std_ims)
+    std_loss = -1*torch.mean(std_ims)
     return std_loss
 
 def make_sphere(args):
