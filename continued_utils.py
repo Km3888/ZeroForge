@@ -17,7 +17,7 @@ query_arrays = {
                 "with_original" : ["spoon","fork","wineglass","knife","chair","airplane"],
                 "orthogonal" : ["round spoon","donut","barbell","american football"],
                 "wineglass": ["wineglass"],
-                "easy_5":["spoon","knife","christmas tree","barbell","umbrella"]
+                "easy_5":["spoon","knife","christmas tree","barbell","umbrella"],
                 "spoon": ["spoon"],
                 "fork": ["fork"],
                 "hammer": ["hammer"],
