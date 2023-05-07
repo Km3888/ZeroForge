@@ -29,7 +29,10 @@ query_arrays = {
                 "six": ['wineglass','spoon','fork','knife','screwdriver','hammer'],
                 "nine": ['wineglass','spoon','fork','knife','screwdriver','hammer','soccer ball','football','plate'],
                 "thirteen": ["wineglass","spoon","fork","knife","screwdriver","hammer","pencil","screw","mushroom","umbrella","thimble","sombrero","sandal"],
-                "fourteen": ["wineglass","spoon","fork","knife","screwdriver","hammer","pencil","screw","plate","mushroom","umbrella","thimble","sombrero","sandal"]
+                "fourteen": ["wineglass","spoon","fork","knife","screwdriver","hammer","pencil","screw","plate","mushroom","umbrella","thimble","sombrero","sandal"],
+                "easy_five_with_original": ["spoon","knife","Christmas tree","barbell","umbrella", "chair","airplane","boat","table","television"],
+                "halfsy_1": ["chair","airplane","boat","table","television"],
+                "halfsy_2": ["spoon","knife","Christmas tree","barbell","umbrella"]
 }
 
 prompts_prefix_pool = ["a photo of a ", "a "]
@@ -149,17 +152,36 @@ def get_networks(args,init_dict):
     args.num_hidden = init_dict["num_hidden"]
     net = autoencoder.EncoderWrapper(args).to(args.device)    
     latent_flow_network = latent_flows.get_generator(args.emb_dims, args.cond_emb_dim, args.device, flow_type=args.flow_type, num_blocks=args.num_blocks, num_hidden=args.num_hidden)
+    if args.use_zero_conv:
+        net.encoder.decoder = autoencoder.ZeroConvDecoder(net.encoder.decoder)
+        net = net.to(args.device)
     if not args.uninitialized:
         sys.stdout.flush()
+<<<<<<< Updated upstream
         checkpoint_nf_path = os.path.join(args.init_base + "/" + init_dict["flow_path"])
         checkpoint = torch.load(checkpoint_nf_path, map_location=args.device)
         latent_flow_network.load_state_dict(checkpoint['model'])
         checkpoint = torch.load(args.init_base +"/"+ init_dict["ae_path"], map_location=args.device)
         net.load_state_dict(checkpoint['model'])
+=======
+        # checkpoint_nf_path = os.path.join(args.init_base + "/" + init_dict["flow_path"])
+        # checkpoint = torch.load(checkpoint_nf_path, map_location=args.device)
+        # latent_flow_network.load_state_dict(checkpoint['model'])
+        # checkpoint = torch.load(args.init_base +"/"+ init_dict["ae_path"], map_location=args.device)
+        # net_checkpoint = checkpoint['model']
+        # net.load_state_dict(checkpoint['model'])
+        
+        checkpoint_dir = "/scratch/km3888/queries/33031346/q=easy_5_with_original_lr=1e-05_beta=200_gpu=0_baseline=False_v=128_k=2_r=nvr+_s=1_init=og_init_zero_conv_c=0.01_improved_temp=100/"
+        checkpoint_nf_path = checkpoint_dir + "flow_model_15000.pt"
+        checkpoint = torch.load(checkpoint_nf_path, map_location=args.device)
+        # checkpoint = {k[18:]:v for k,v in checkpoint.items() if k.startswith('latent_flow_model')}
+        latent_flow_network.load_state_dict(checkpoint)
+        checkpoint = torch.load(checkpoint_dir + "aencoder_15000.pt", map_location=args.device)
+        checkpoint = {k[8:]:v for k,v in checkpoint.items()}
+        net.load_state_dict(checkpoint)
+        
+>>>>>>> Stashed changes
         net.eval()
-        if args.use_zero_conv:
-            net.encoder.decoder = autoencoder.ZeroConvDecoder(net.encoder.decoder)
-            net = net.to(args.device)
         #calculate total parameters in autoencoder and latent flow
         total_params_ae = sum(p.numel() for p in net.parameters() if p.requires_grad)
         total_params_nf = sum(p.numel() for p in latent_flow_network.parameters() if p.requires_grad)
