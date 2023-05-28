@@ -1,4 +1,4 @@
-from scripts.renderer import visual_hull, absorption_only, emission_absorption
+from rendering.scripts.renderer import visual_hull, absorption_only, emission_absorption
 
 renderer_dict = {
     'visual_hull': visual_hull.VisualHullRenderer,

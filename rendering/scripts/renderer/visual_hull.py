@@ -1,5 +1,5 @@
 import torch
-from scripts.renderer.absorption_only import AbsorptionOnlyRenderer
+from rendering.scripts.renderer.absorption_only import AbsorptionOnlyRenderer
 
 
 class VisualHullRenderer():

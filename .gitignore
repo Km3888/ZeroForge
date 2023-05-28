@@ -1,3 +1,4 @@
+slurm/*
 exps/*
 .ipynb_checkpoints/
 nohup.out
@@ -62,3 +63,14 @@ chair_voxel_128_vis.png
 wineglass_render.png
 lamp_render.png
 requirements.txt
+nvr_wineglass.png
+preprocess_diff=False.png
+preprocess_diff=True.png
+env.yml
+git.txt
+rendering/nvr_torch/nvr_plus.pt
+fetch_tensorboard.sh
+forge_losses.sh
+tb_to_csv.py
+test_forge.sh
+all_forge_losses.sh

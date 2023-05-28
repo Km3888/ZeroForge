@@ -1,3 +1,4 @@
+import copy
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -164,9 +165,9 @@ class VoxelEncoderBN(nn.Module):
 class Occ_Simple_Decoder(nn.Module):
     def __init__(self,  z_dim=128, point_dim=3, 
                  hidden_size=128, leaky=False, last_sig=False):
-        super().__init__()
+        super(Occ_Simple_Decoder, self).__init__()
         self.z_dim = z_dim
-
+        self.hidden_size = hidden_size
         # Submodules
         self.fc_p = nn.Linear(point_dim, hidden_size)
 
@@ -178,6 +179,8 @@ class Occ_Simple_Decoder(nn.Module):
         self.block3 = ResnetBlockFC(hidden_size)
         self.block4 = ResnetBlockFC(hidden_size)
 
+        self.blocks = [self.block0, self.block1, self.block2, self.block3, self.block4]
+        
         self.fc_out = nn.Linear(hidden_size, 1)
 
         if not leaky:
@@ -212,6 +215,47 @@ class Occ_Simple_Decoder(nn.Module):
         return out           
 ####################################################################################################
 ####################################################################################################
+
+class ZeroConvDecoder(nn.Module):
+    
+    def __init__(self,trained):
+        super(ZeroConvDecoder, self).__init__()
+        self.frozen = nn.ModuleList(trained.blocks)
+        self.hidden_size = trained.hidden_size
+        
+        self.fc_z = trained.fc_z
+        self.fc_p = trained.fc_p
+        self.fc_out = trained.fc_out
+        
+        self.copies = []
+        self.actvn = trained.actvn
+        
+        for i in range(len(self.frozen)):
+            self.copies.append(copy.deepcopy(self.frozen[i]))
+            for param in self.frozen[i].parameters():
+                param.requires_grad = False
+        self.copies = nn.ModuleList(self.copies)
+        self.zero_fcs = nn.ModuleList([nn.Linear(self.hidden_size,self.hidden_size,1) for i in range(5)])
+        for i in range(len(self.frozen)):
+            self.zero_fcs[i].weight.data.zero_()
+            self.zero_fcs[i].bias.data.zero_()
+        
+    def forward(self, p, z):
+        batch_size, T, D = p.size()
+        
+        net = self.fc_p(p)
+
+        net_z = self.fc_z(z).unsqueeze(1)
+        net = net + net_z
+        
+        for i,block in enumerate(self.copies):
+            new_version = self.zero_fcs[i](block(net))
+            net = self.frozen[i](net) + new_version
+                    
+        out = self.fc_out(self.actvn(net))
+        out = out.squeeze(-1)
+        
+        return out
 
 class get_model(nn.Module):
     def __init__(self, args):
@@ -263,3 +307,15 @@ class get_model(nn.Module):
         shape_embs = self.encoder(data_input)  
         pred = self.decoding(shape_embs, points=query_points)
         return pred, shape_embs
+    
+class EncoderWrapper(nn.Module):
+    
+    def __init__(self,args):
+        super(EncoderWrapper,self).__init__()
+        self.encoder = get_model(args)
+    
+    def forward(self,shape_embedding,points=None):
+        return self.encoder.decoding(shape_embedding,points)
+        
+    def load_state_dict(self,ck):
+        self.encoder.load_state_dict(ck)
