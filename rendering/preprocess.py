@@ -1,5 +1,3 @@
-import argparse
-import random
 import numpy as np
 import torch
 import torch.nn as nn
@@ -13,14 +11,8 @@ import matplotlib.pyplot as plt
 import torchvision.transforms.functional as F
 
 from tensorflow_graphics.projects.neural_voxel_renderer import helpers
-from tensorflow_graphics.projects.neural_voxel_renderer import models
-from tensorflow_graphics.rendering.volumetric import visual_hull
 
-from tensorflow_graphics.geometry.representation import grid
 from tensorflow_graphics.geometry.transformation import rotation_matrix_3d
-
-import optvis
-import jax
 
 if True:
     camera_rotation_matrix= np.array([[ 9.9997330e-01,  7.3080887e-03,  8.9461202e-11],\

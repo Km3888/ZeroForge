@@ -6,12 +6,7 @@ from train_autoencoder import parsing
 import torch
 import sys
 import os
-import numpy as np
 import random
-import openai
-import json
-import pdb
-from tqdm import tqdm
 
 query_arrays = {
                 "with_original" : ["spoon","fork","wineglass","knife","chair","airplane"],

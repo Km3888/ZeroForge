@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 
 from rendering.nvr_torch.torch_model import NVR_Plus
-from rendering.preprocess import diff_preprocess,Preprocessor
+from rendering.preprocess import diff_preprocess
 import numpy as np
 
 class NVR_Renderer(nn.Module):
