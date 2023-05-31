@@ -113,6 +113,7 @@ def evaluate_true_voxel(out_3d_hard,args,clip_model,text_features,i,query_array)
     return voxel_similarity
 
 def clip_loss(im_embs,text_features,args,query_array):
+    #start with simple similarity loss
     loss = -1*torch.cosine_similarity(text_features,im_embs).mean()
     
     #normalize im_embs
@@ -120,26 +121,27 @@ def clip_loss(im_embs,text_features,args,query_array):
     
     #compute all pair cosine similarity between im_embs and text_features
     cos_sim = torch.mm(im_embs, text_features.t())
-    if args.improved_contrast:
-        k = len(set(query_array))
-        n = cos_sim.shape[0]
-        mask = torch.zeros_like(cos_sim)
+    
+    #mask out similarities for the same text query
+    k = len(set(query_array))
+    n = cos_sim.shape[0]
+    mask = torch.zeros_like(cos_sim)
 
-        for i in range(1,args.num_views):
-            upper_diag = torch.diag(torch.ones(n - k*i), diagonal=k*i).to(args.device)
-            lower_diag = torch.diag(torch.ones(n - k*i), diagonal=-1*k*i).to(args.device)
-            mask = mask +  upper_diag + lower_diag
-        mask = 1 - mask
-        mask = mask.to(args.device)
-        cos_sim = cos_sim * mask
+    for i in range(1,args.num_views):
+        upper_diag = torch.diag(torch.ones(n - k*i), diagonal=k*i).to(args.device)
+        lower_diag = torch.diag(torch.ones(n - k*i), diagonal=-1*k*i).to(args.device)
+        mask = mask +  upper_diag + lower_diag
+    mask = 1 - mask
+    mask = mask.to(args.device)
+    cos_sim = cos_sim * mask
+    
+    #Compute contrastive loss
     probs = torch.softmax(args.temp*cos_sim, dim=1)
     log_probs = torch.log(probs)
     diag_terms = log_probs.diag()
-    
     contrast_loss = -1*diag_terms.mean()
-    #compute loss
-    if args.all_contrast:
-        return contrast_loss,contrast_loss
+    
+    #compute full training loss
     train_loss = loss + contrast_loss * args.contrast_lambda
     return train_loss,loss
 

@@ -124,10 +124,6 @@ def make_writer(args):
         tensorboard_comment += '_zero_conv'
     if args.contrast_lambda > 0:
         tensorboard_comment += '_c=%s' % args.contrast_lambda
-    if args.all_contrast:
-        tensorboard_comment += '_all_contrast'
-    if args.improved_contrast:
-        tensorboard_comment += '_improved'
     if args.background != "default":
         tensorboard_comment += '_bg=%s' % args.background
     if args.temp!=1:
