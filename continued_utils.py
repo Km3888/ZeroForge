@@ -134,8 +134,6 @@ def make_writer(args):
         tensorboard_comment += '_bg=%s' % args.background
     if args.temp!=1:
         tensorboard_comment += '_temp=%s' % args.temp
-    if args.std_coeff>0:
-        tensorboard_comment += '_std=%s' % args.std_coeff
     if args.slurm_id is not None:
         tensorboard_comment = str(args.slurm_id) + "/" + tensorboard_comment
     log_dir = '/scratch/km3888/clip_forge_runs/' + tensorboard_comment
@@ -206,7 +204,6 @@ def get_local_parser(mode="args"):
     parser.add_argument("--kl_lambda", type=float, default=0.00, help="KL lambda")
     parser.add_argument("--radius",type=float,default=0.75,help="radius for sphere prior")
     parser.add_argument("--background",type=str,default="default",help="background color")
-    parser.add_argument("--std_coeff",type=float,default=0.0)
     if mode == "args":
         args = parser.parse_args()
         return args
