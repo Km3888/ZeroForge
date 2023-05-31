@@ -124,8 +124,6 @@ def make_writer(args):
         tensorboard_comment += '_zero_conv'
     if args.contrast_lambda > 0:
         tensorboard_comment += '_c=%s' % args.contrast_lambda
-    if args.background != "default":
-        tensorboard_comment += '_bg=%s' % args.background
     if args.temp!=1:
         tensorboard_comment += '_temp=%s' % args.temp
     if args.slurm_id is not None:
@@ -195,7 +193,6 @@ def get_local_parser(mode="args"):
     
     parser.add_argument("--use_zero_conv", action="store_true", help="Use zero conv")
     parser.add_argument("--radius",type=float,default=0.75,help="radius for sphere prior")
-    parser.add_argument("--background",type=str,default="default",help="background color")
     if mode == "args":
         args = parser.parse_args()
         return args

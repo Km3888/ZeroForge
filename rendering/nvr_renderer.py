@@ -14,7 +14,7 @@ class NVR_Renderer(nn.Module):
         self.model = self.model.to(device)
         self.model.eval()
     
-    def forward(self,voxels,background='default'):
+    def forward(self,voxels):
         light_position = np.array([-1.0901234 ,  0.01720496,  2.6110773]).astype(np.float32)
         light_position = np.expand_dims(light_position,axis=(0)).astype(np.float32)
         light_position = torch.from_numpy(light_position).to(voxels.device)
@@ -25,7 +25,7 @@ class NVR_Renderer(nn.Module):
         batch_size=voxels.shape[0]
         rotation_angles = self.generate_random_rotations(batch_size).astype(np.float32)
 
-        final_composite,interpolated_voxels = diff_preprocess(voxels,rotation_angles,background=background)
+        final_composite,interpolated_voxels = diff_preprocess(voxels,rotation_angles)
         final_composite = (final_composite - 0.5)*2
         interpolated_voxels = interpolated_voxels.permute(0,4,1,2,3)
 

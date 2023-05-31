@@ -189,7 +189,7 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         
         with torch.cuda.amp.autocast():
             wrapper.module.autoencoder.train()
-            out_3d, im_samples, im_embs = wrapper(text_features, background = args.background)
+            out_3d, im_samples, im_embs = wrapper(text_features)
             loss,strict_loss = clip_loss(im_embs, text_features, args, query_array)
             #strict loss doesn't include contrative term
         if(iter % 100 == 0):

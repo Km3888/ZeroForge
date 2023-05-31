@@ -254,10 +254,9 @@ def diff_transform_volume(voxels, transformation_matrix,voxel_size = (128,128,12
     output = output.permute(0,2,3,4,1)
     return output
 
-def diff_preprocess(object_voxels,rotation_angles,background='default'):
+def diff_preprocess(object_voxels,rotation_angles):
     object_voxels = diff_load_voxel(object_voxels)
     interpolated_voxels = diff_estimate_ground_image(object_voxels,rotation_angles)
-    batch_size = interpolated_voxels.shape[0]
 
     ground_image, ground_alpha = \
         helpers.generate_ground_image(IMAGE_SIZE, IMAGE_SIZE, focal, principal_point,
@@ -268,20 +267,6 @@ def diff_preprocess(object_voxels,rotation_angles,background='default'):
     ground_alpha = torch.tensor(ground_alpha.numpy(),dtype=torch.float32).to(object_voxels.device)
     ground_image = ground_image.permute(0,3,1,2)
     ground_alpha = ground_alpha.permute(0,3,1,2)
-    if background == 'gaussian':
-        seed = random.randint(0, 1000000)
-        fft_bg = optvis.image_sample(
-        jax.random.PRNGKey(seed), [batch_size, 256, 256, 3], sd=0.2, decay_power=1.5)[0]
-        backgrounds = []
-        for i in range(batch_size):
-            seed = random.randint(0, 1000000)
-            fft_bg = optvis.image_sample(
-            jax.random.PRNGKey(seed), [batch_size, 256, 256, 3], sd=0.2, decay_power=1.5)[0]
-            backgrounds.append(np.array(fft_bg))
-        backgrounds_np = np.stack(backgrounds)
-        ground_image = torch.from_numpy(np.array(backgrounds_np)).to(object_voxels.device)
-        ground_image = ground_image.permute(0,3,1,2)
-        ground_alpha = torch.ones_like(ground_image)
             
     object_translation_dvr = np.array(object_translation[..., [0, 2, 1]], 
                                     dtype=np.float32)
@@ -354,24 +339,3 @@ def save_output(output, path):
     ax.set_title('NVR+ prediction')
     plt.savefig(path)
     plt.show()
-
-if __name__=='__main__':
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--differentiable', action='store_true')
-    args = parser.parse_args()
-
-    path="airplane_128.npy"
-    with open(path, 'rb') as f:
-        voxel = np.load(f)
-    torch_voxel = torch.from_numpy(voxel).to(device).float()
-    torch_voxel.requires_grad=True
-    
-    if not args.differentiable:
-        final_composite,interpolated_voxels = og_preprocess(torch_voxel)
-        final_composite = torch.tensor(final_composite.numpy(),dtype=torch.float32).to(device)
-    else:
-        final_composite,interpolated_voxels = diff_preprocess(torch_voxel)
-        final_composite = final_composite.permute(0,2,3,1)
-    
-    # render and save final-composite
-    save_output(final_composite,"preprocess_diff=%s.png" % args.differentiable)
