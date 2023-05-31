@@ -160,8 +160,6 @@ def clip_loss(im_embs,text_features,args,query_array):
     log_probs = torch.log(probs)
     diag_terms = log_probs.diag()
     
-    if args.log_contrast:
-        diag_terms = torch.log(diag_terms)
     contrast_loss = -1*diag_terms.mean()
     #compute loss
     if args.all_contrast:

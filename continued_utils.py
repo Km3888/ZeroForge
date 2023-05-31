@@ -126,8 +126,6 @@ def make_writer(args):
         tensorboard_comment += '_c=%s' % args.contrast_lambda
     if args.all_contrast:
         tensorboard_comment += '_all_contrast'
-    if args.log_contrast:
-        tensorboard_comment += '_log'
     if args.improved_contrast:
         tensorboard_comment += '_improved'
     if args.background != "default":
@@ -195,7 +193,6 @@ def get_local_parser(mode="args"):
     parser.add_argument("--nvr_renderer_checkpoint", type=str, default="/scratch/km3888/weights/nvr_plus.pt")
     parser.add_argument("--query_dir", type=str, default="/scratch/mp5847/queries")
     parser.add_argument("--contrast_lambda",type=float,default=0.1)
-    parser.add_argument("--log_contrast",action="store_true",help="log contrast")
     parser.add_argument("--all_contrast",action="store_true",help="all contrast")
     parser.add_argument("--improved_contrast",action="store_true",help="improved contrast")
     parser.add_argument("--temp",type=float,default=1)
