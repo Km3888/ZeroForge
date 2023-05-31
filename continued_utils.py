@@ -37,66 +37,12 @@ query_arrays = {
 
 prompts_prefix_pool = ["a photo of a ", "a "]
 
-def generate_gpt_prompts(category_list):
-   	
-    #api key is in open_ai_key.txt
-    with open("openai_api_key.txt", "r") as f:
-        openai.api_key = f.read().strip()
 
-    json_name = "json_name.json"
-
-    all_responses = {}
-    vowel_list = ['A', 'E', 'I', 'O', 'U']
-
-    for category in tqdm(category_list):
-        if category[0] in vowel_list:
-            article = "an"
-        else:
-            article = "a"
-
-        prompts = []
-        prompts.append("Describe what " + article + " " + category + " looks like")
-        prompts.append("How can you identify " + article + " " + category + "?")
-        prompts.append("What does " + article + " " + category + " look like?")
-        prompts.append("Describe an image from the internet of " + article + " "  + category)
-        prompts.append("A caption of an image of "  + article + " "  + category + ":")
-
-        all_result = []
-        for curr_prompt in prompts:
-            response = openai.Completion.create(
-                engine="text-davinci-002",
-                prompt=curr_prompt,
-                temperature=.99,
-                max_tokens = 50,
-                n=10,
-                stop="."
-            )
-
-            for r in range(len(response["choices"])):
-                result = response["choices"][r]["text"]
-                all_result.append(result.replace("\n\n", "") + ".")
-
-        all_responses[category] = all_result
-
-    with open(json_name, 'w') as f:
-        json.dump(all_responses, f, indent=4)
-
-def get_prompts(obj, num_prompts, use_gpt):
-    
+def get_prompts(obj, num_prompts):
     #get prompts for each object
     prompts = []
-    if use_gpt:
-        with open("json_name.json", "r") as f:
-            promps_dict = json.load(f)
-    
-        for i in range(num_prompts):
-            if(random.random() < 0.5 and use_gpt):
-                prompts.append(random.choice(promps_dict[obj]))
-            else:
-                prompts.append(random.choice(prompts_prefix_pool) + obj)
-    else:
-        for i in range(num_prompts):
-            prompts.append(random.choice(prompts_prefix_pool) + obj)
+    for i in range(num_prompts):
+        prompts.append(random.choice(prompts_prefix_pool) + obj)
     return prompts
 
 def make_init_dict():
@@ -202,7 +148,7 @@ def get_text_embeddings(args,clip_model,query_array):
     # get the text embedding for each query
     prompts = []
     for obj in query_array:
-        prompts.extend(get_prompts(obj, 1, args.use_gpt_prompts))
+        prompts.extend(get_prompts(obj, 1))
     
     text_tokens = []
     with torch.no_grad():
