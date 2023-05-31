@@ -1,42 +1,30 @@
 import os
-os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:512"
-import os.path as osp
-import logging
 import gc
 import time
 
 import torch
 import torch.optim as optim
 
-from networks import autoencoder, latent_flows
 from networks.wrapper import Wrapper
 
-import clip
 from test_post_clip import voxel_save
 
-from train_post_clip import get_dataloader, experiment_name2, get_condition_embeddings, get_local_parser, get_clip_model
-from train_autoencoder import parsing
+from train_post_clip import get_local_parser, get_clip_model
 
 from utils import helper
-from utils import visualization
-from utils import experimenter
 
 from rendering.nvr_renderer import NVR_Renderer
 from rendering.baseline_renderer import BaselineRenderer
 
 import torchvision
-from torchvision.utils import save_image
 import torchvision.transforms as T
-
-from torch.utils.tensorboard import SummaryWriter
 
 import PIL
 import sys
 import numpy as np
 import torch.nn as nn
-import random 
 
-from continued_utils import query_arrays, make_writer, get_networks, get_local_parser, get_clip_model,get_text_embeddings,get_type,make_init_dict, get_prompts, generate_gpt_prompts
+from continued_utils import query_arrays, make_writer, get_networks, get_local_parser, get_clip_model,get_text_embeddings,make_init_dict
 import PIL
 
        
@@ -217,13 +205,6 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         query_array = query_arrays[args.query_array]
     else:
         query_array = [args.query_array]
-
-    #check if file json_name.json exists
-    if not os.path.exists("json_name.json"):
-        print("GPT-3 prompt file not found. Generating prompts...")
-        generate_gpt_prompts(["wineglass","spoon","fork","knife","screwdriver","hammer","pencil","screw","plate","mushroom","umbrella","thimble","sombrero","sandal"])
-    else:
-        print("GPT-3 prompt file found. Skipping prompt generation...")
     
     query_array = query_array*args.num_views
 
@@ -246,10 +227,6 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     for iter in range(20000):
         if args.use_gpt_prompts:
             text_features = get_text_embeddings(args,clip_model, query_array).detach()
-
-        if args.switch_point is not None and iter == args.switch_point:
-            args.renderer = 'nvr+'
-            renderer = NVR_Renderer(args, args.device)
 
         if not iter%500:
             with torch.cuda.amp.autocast():
@@ -309,7 +286,7 @@ def main(args):
     args.writer = make_writer(args)
     args.id = args.writer.log_dir.split('runs/')[-1]
     
-    device, gpu_array = helper.get_device(args)
+    device, _ = helper.get_device(args)
     args.device = device
     
     print("Using device: ", device)
@@ -319,7 +296,7 @@ def main(args):
     net,latent_flow_network = get_networks(args,init_dict)
 
     param_dict={'device':args.device,'cube_len':args.num_voxels}
-    if args.renderer == 'ea' or args.switch_point is not None:
+    if args.renderer == 'ea':
         renderer=BaselineRenderer('absorption_only',param_dict)
     elif args.renderer == 'nvr+':
         renderer = NVR_Renderer(args, args.device)
