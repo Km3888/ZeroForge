@@ -74,3 +74,8 @@ forge_losses.sh
 tb_to_csv.py
 test_forge.sh
 all_forge_losses.sh
+0.1outputs/*
+outputs/*
+survey_images/*
+visuals/*
+augmented_outputs/*
