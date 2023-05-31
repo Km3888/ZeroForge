@@ -187,7 +187,6 @@ def get_local_parser(mode="args"):
     parser.add_argument("--nvr_renderer_checkpoint", type=str, default="/scratch/km3888/weights/nvr_plus.pt")
     parser.add_argument("--query_dir", type=str, default="/scratch/mp5847/queries")
     parser.add_argument("--contrast_lambda",type=float,default=0.1)
-    parser.add_argument("--all_contrast",action="store_true",help="all contrast")
     parser.add_argument("--improved_contrast",action="store_true",help="improved contrast")
     parser.add_argument("--temp",type=float,default=1)
     
