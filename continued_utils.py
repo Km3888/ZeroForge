@@ -120,8 +120,6 @@ def make_writer(args):
         return None
     tensorboard_comment = 'q=%s_lr=%s_beta=%s_gpu=%s_baseline=%s_v=%s_k=%s_r=%s_s=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized,args.num_voxels,args.num_views,args.renderer,args.seed)
     tensorboard_comment += "_init=%s" % args.init
-    if args.switch_point is not None:
-        tensorboard_comment += '_s=%s' % args.switch_point
     if args.orthogonal:
         tensorboard_comment += '_orthogonal'
     if args.use_zero_conv:
@@ -157,30 +155,11 @@ def get_networks(args,init_dict):
         net = net.to(args.device)
     if not args.uninitialized:
         sys.stdout.flush()
-<<<<<<< Updated upstream
         checkpoint_nf_path = os.path.join(args.init_base + "/" + init_dict["flow_path"])
         checkpoint = torch.load(checkpoint_nf_path, map_location=args.device)
         latent_flow_network.load_state_dict(checkpoint['model'])
         checkpoint = torch.load(args.init_base +"/"+ init_dict["ae_path"], map_location=args.device)
         net.load_state_dict(checkpoint['model'])
-=======
-        # checkpoint_nf_path = os.path.join(args.init_base + "/" + init_dict["flow_path"])
-        # checkpoint = torch.load(checkpoint_nf_path, map_location=args.device)
-        # latent_flow_network.load_state_dict(checkpoint['model'])
-        # checkpoint = torch.load(args.init_base +"/"+ init_dict["ae_path"], map_location=args.device)
-        # net_checkpoint = checkpoint['model']
-        # net.load_state_dict(checkpoint['model'])
-        
-        checkpoint_dir = "/scratch/km3888/queries/33031346/q=easy_5_with_original_lr=1e-05_beta=200_gpu=0_baseline=False_v=128_k=2_r=nvr+_s=1_init=og_init_zero_conv_c=0.01_improved_temp=100/"
-        checkpoint_nf_path = checkpoint_dir + "flow_model_15000.pt"
-        checkpoint = torch.load(checkpoint_nf_path, map_location=args.device)
-        # checkpoint = {k[18:]:v for k,v in checkpoint.items() if k.startswith('latent_flow_model')}
-        latent_flow_network.load_state_dict(checkpoint)
-        checkpoint = torch.load(checkpoint_dir + "aencoder_15000.pt", map_location=args.device)
-        checkpoint = {k[8:]:v for k,v in checkpoint.items()}
-        net.load_state_dict(checkpoint)
-        
->>>>>>> Stashed changes
         net.eval()
         #calculate total parameters in autoencoder and latent flow
         total_params_ae = sum(p.numel() for p in net.parameters() if p.requires_grad)
@@ -210,7 +189,6 @@ def get_local_parser(mode="args"):
     parser.add_argument("--uninitialized",  type=bool, default=False, help='Use untrained networks')
     parser.add_argument("--num_voxels",  type=int, default=32, help='number of voxels')
     # parser.add_argument("--threshold",  type=float, default=0.5, help='threshold for voxelization')
-    parser.add_argument("--switch_point",type=float, default=None, help='switch point for the renderer')
     parser.add_argument("--renderer",  type=str, default='ea')
     parser.add_argument("--orthogonal",  type=bool, default=False, help='use orthogonal views')
     parser.add_argument("--init",  type=str, default="og_init", help='what is the initialization')
@@ -219,7 +197,6 @@ def get_local_parser(mode="args"):
     parser.add_argument("--slurm_id", type=int, default=None)
     
     #checkpoint for nvr_renderer
-    parser.add_argument("--use_gpt_prompts", action="store_true", help="Use GPT prompts instead of CLIP prompts")
     parser.add_argument("--nvr_renderer_checkpoint", type=str, default="/scratch/km3888/weights/nvr_plus.pt")
     parser.add_argument("--query_dir", type=str, default="/scratch/mp5847/queries")
     parser.add_argument("--contrast_lambda",type=float,default=0.1)
