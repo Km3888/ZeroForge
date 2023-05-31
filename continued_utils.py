@@ -120,8 +120,6 @@ def make_writer(args):
         return None
     tensorboard_comment = 'q=%s_lr=%s_beta=%s_gpu=%s_baseline=%s_v=%s_k=%s_r=%s_s=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized,args.num_voxels,args.num_views,args.renderer,args.seed)
     tensorboard_comment += "_init=%s" % args.init
-    if args.orthogonal:
-        tensorboard_comment += '_orthogonal'
     if args.use_zero_conv:
         tensorboard_comment += '_zero_conv'
     if args.contrast_lambda > 0:
@@ -190,7 +188,6 @@ def get_local_parser(mode="args"):
     parser.add_argument("--num_voxels",  type=int, default=32, help='number of voxels')
     # parser.add_argument("--threshold",  type=float, default=0.5, help='threshold for voxelization')
     parser.add_argument("--renderer",  type=str, default='ea')
-    parser.add_argument("--orthogonal",  type=bool, default=False, help='use orthogonal views')
     parser.add_argument("--init",  type=str, default="og_init", help='what is the initialization')
     parser.add_argument("--init_base",  type=str, default=" ", help='where is the initialization')
     parser.add_argument("--setting", type=int, default=None)
