@@ -88,3 +88,4 @@ def get_activations(datapoints, model, args):
     all_labels = np.concatenate(all_labels)
     return all_activation, all_labels  
 
+

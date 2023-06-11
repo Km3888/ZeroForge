@@ -2,18 +2,19 @@ import argparse
 from continued_training import get_local_parser,main
 
 
-setting_names= ['beta','learning_rate','num_views','renderer','query_array','init','contrast_lambda','temp','zero_conv','background']
+setting_names= ['beta','learning_rate','num_views','renderer','query_array','init','contrast_lambda','temp','zero_conv','background','seed']
 
 settings = [[200],
             [01e-05],
             [3],
             ['nvr+'],
-            ["four"],
+            ["easy_five_with_original"],
             ["og_init"],
-            [0.01,0.1],
-            [50,100],
+            [0.0,0.1],
+            [50],
             [False],
-            ['default']]
+            ['default'],
+            [1]]
 
 
 num_settings = 1

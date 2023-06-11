@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=2
+#SBATCH --cpus-per-task=3
 #SBATCH --time=40:00:00
 #SBATCH --mem=50GB
 #SBATCH --job-name=continue_training
@@ -10,8 +10,8 @@
 #SBATCH --mail-type=ALL
 #SBATCH --output=/home/km3888/general_clip_forge/slurm/job%A_%a.out
 #SBATCH --error=/home/km3888/general_clip_forge/slurm/job%A_%a.err
-#SBATCH --gres=gpu:a100:2
-#SBATCH --array=0-2
+#SBATCH --gres=gpu:a100:3
+#SBATCH --array=0-1
 
 module purge
 
@@ -26,9 +26,9 @@ echo ${SLURM_ARRAY_TASK_ID}
 
 singularity exec --nv --overlay $OVERLAY_FILE $SINGULARITY_IMAGE /bin/bash \
 -c "source /ext3/miniconda3/bin/activate;\
-python hpc_scripts/job_array_std.py --setting ${SLURM_ARRAY_TASK_ID} \
+python hpc_scripts/job_array_bin.py --setting ${SLURM_ARRAY_TASK_ID} \
 --slurm_id ${SLURM_ARRAY_JOB_ID} \
 --num_voxels 128 --gpu 0 --query_array "airplane" \
 --init og_init --init_base /scratch/km3888/inits \
---query_dir /scratch/km3888/queries --improved_contrast\
+--query_dir /scratch/km3888/queries --improved_contrast \
 "

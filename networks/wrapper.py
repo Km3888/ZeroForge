@@ -26,8 +26,7 @@ class Wrapper(nn.Module):
         self.query_array = query_array
         self.args = args
 
-    def forward(self, text_features,hard=False):
-        # def gen_shapes(query_array,args,autoencoder,latent_flow_model,text_features):
+    def forward(self, text_features,no_bin=False,hard=False,background='default'):
         self.latent_flow_model.eval() # has to be in .eval() mode for the sampling to work (which is bad but whatever)
         
         voxel_size = self.args.num_voxels
@@ -43,7 +42,10 @@ class Wrapper(nn.Module):
         if hard:
             out_3d_bin = (out_3d.detach() > self.args.threshold).float()
         else:
-            out_3d_bin = torch.sigmoid(self.args.beta*(out_3d-self.args.threshold))#.clone()
+            if no_bin:
+                out_3d_bin = torch.clamp(out_3d,0,1)
+            else:
+                out_3d_bin = torch.sigmoid(self.args.beta*(out_3d-self.args.threshold))#.clone()
 
         ims = self.renderer(out_3d_bin).double()
         ims = self.resizer(ims)

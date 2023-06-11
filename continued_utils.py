@@ -12,7 +12,7 @@ query_arrays = {
                 "with_original" : ["spoon","fork","wineglass","knife","chair","airplane"],
                 "orthogonal" : ["round spoon","donut","barbell","american football"],
                 "wineglass": ["wineglass"],
-                "easy_5":["spoon","knife","christmas tree","barbell","umbrella"],
+                "easy_5":["spoon","knife","christmas tree","donut","umbrella"],
                 "spoon": ["spoon"],
                 "fork": ["fork"],
                 "hammer": ["hammer"],
@@ -23,11 +23,12 @@ query_arrays = {
                 "nine": ["wineglass","spoon","fork","knife","screwdriver","hammer","soccer ball", "football","plate"],
                 "six": ['wineglass','spoon','fork','knife','screwdriver','hammer'],
                 "nine": ['wineglass','spoon','fork','knife','screwdriver','hammer','soccer ball','football','plate'],
-                "thirteen": ["wineglass","spoon","fork","knife","screwdriver","hammer","pencil","screw","mushroom","umbrella","thimble","sombrero","sandal"],
+                "thirteen": ["wineglass","spoon","fork","donut","screwdriver","hammer","pencil","screw","mushroom","umbrella","thimble","sombrero","sandal"],
                 "fourteen": ["wineglass","spoon","fork","knife","screwdriver","hammer","pencil","screw","plate","mushroom","umbrella","thimble","sombrero","sandal"],
                 "easy_five_with_original": ["spoon","knife","Christmas tree","barbell","umbrella", "chair","airplane","boat","table","television"],
                 "halfsy_1": ["chair","airplane","boat","table","television"],
-                "halfsy_2": ["spoon","knife","Christmas tree","barbell","umbrella"]
+                "halfsy_2": ["spoon","knife","Christmas tree","barbell","umbrella"],
+                "easy_3": ["spoon","knife","umbrella"]
 }
 
 prompts_prefix_pool = ["a photo of a ", "a "]
@@ -67,6 +68,8 @@ def make_writer(args):
         tensorboard_comment += '_c=%s' % args.contrast_lambda
     if args.temp!=1:
         tensorboard_comment += '_temp=%s' % args.temp
+    if args.std_coeff>0:
+        tensorboard_comment += '_std=%s' % args.std_coeff
     if args.slurm_id is not None:
         tensorboard_comment = str(args.slurm_id) + "/" + tensorboard_comment
     log_dir = '/scratch/km3888/clip_forge_runs/' + tensorboard_comment
@@ -133,6 +136,8 @@ def get_local_parser(mode="args"):
     
     parser.add_argument("--use_zero_conv", action="store_true", help="Use zero conv")
     parser.add_argument("--radius",type=float,default=0.75,help="radius for sphere prior")
+    parser.add_argument("--background",type=str,default="default",help="background color")
+    parser.add_argument("--std_coeff",type=float,default=0.0)
     if mode == "args":
         args = parser.parse_args()
         return args

@@ -7,7 +7,8 @@ import torch.optim as optim
 
 from networks.wrapper import Wrapper
 
-from test_post_clip import voxel_save
+import clip
+from test_post_clip import voxel_save,generate_all_queries_3, generate_all_queries_2
 
 from train_post_clip import get_local_parser, get_clip_model
 
@@ -26,7 +27,7 @@ import torch.nn as nn
 
 from continued_utils import query_arrays, make_writer, get_networks, get_local_parser, get_clip_model,get_text_embeddings,make_init_dict
 import PIL
-
+import pdb
        
 def evaluate_true_voxel(out_3d_hard,args,clip_model,text_features,i,query_array):
     # code for saving the "true" voxel image
@@ -62,7 +63,7 @@ def evaluate_true_voxel(out_3d_hard,args,clip_model,text_features,i,query_array)
     
 def do_eval(query_array,args,iter,text_features,best_hard_loss,wrapper,clip_model):    
     with torch.no_grad():
-      out_3d_hard, rgbs_hard, hard_im_embeddings = wrapper(text_features,hard=True)
+      out_3d_hard, rgbs_hard, hard_im_embeddings = wrapper(text_features,no_bin=args.no_binarization,hard=True)
     #save out_3d to numpy file
     if args.renderer=='ea':
         #baseline renderer gives 3 dimensions
@@ -72,10 +73,10 @@ def do_eval(query_array,args,iter,text_features,best_hard_loss,wrapper,clip_mode
         
     if args.use_tensorboard:
         args.writer.add_scalar('Loss/hard_loss', hard_loss, iter)
-            #write to tensorboard
-        if (iter % 500 ==0) and (iter != 0):
-            voxel_render_loss = -1* evaluate_true_voxel(out_3d_hard,args,clip_model,text_features,iter,query_array)
-            args.writer.add_scalar('Loss/voxel_render_loss', voxel_render_loss, iter)
+
+    if hard_loss<best_hard_loss:
+        save_images(rgbs_hard,iter,args,query_array)
+        best_hard_loss = hard_loss
     
     gc.collect()
     torch.cuda.empty_cache()
@@ -153,8 +154,18 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         query_array = query_arrays[args.query_array]
     else:
         query_array = [args.query_array]
-    
+
+    #check if file json_name.json exists
+    if not os.path.exists("json_name.json"):
+        print("GPT-3 prompt file not found. Generating prompts...")
+        generate_gpt_prompts(["wineglass","spoon","fork","knife","screwdriver","hammer","pencil","screw","plate","mushroom","umbrella","thimble","sombrero","sandal"])
+    else:
+        print("GPT-3 prompt file found. Skipping prompt generation...")
     query_array = query_array*args.num_views
+    if args.query_array == "subset":
+        all_queries,_ = generate_all_queries_3()
+    if args.query_array == "superset":
+        all_queries,_ = generate_all_queries_2()
 
     print('query array:',query_array)
     text_features = get_text_embeddings(args,clip_model,query_array).detach()
@@ -173,6 +184,9 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     for iter in range(20000):
         if args.use_gpt_prompts:
             text_features = get_text_embeddings(args,clip_model, query_array).detach()
+        if args.query_array == "subset" or args.query_array == "superset":
+            queries = random.choices(all_queries,k=20)
+            text_features = get_text_embeddings(args,clip_model, queries).detach()
 
         if not iter%500:
             with torch.cuda.amp.autocast():
@@ -189,7 +203,7 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         
         with torch.cuda.amp.autocast():
             wrapper.module.autoencoder.train()
-            out_3d, im_samples, im_embs = wrapper(text_features)
+            out_3d, im_samples, im_embs = wrapper(text_features,no_bin=args.no_binarization,background = args.background)
             loss,strict_loss = clip_loss(im_embs, text_features, args, query_array)
             #strict loss doesn't include contrative term
         if(iter % 100 == 0):
