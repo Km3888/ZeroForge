@@ -96,12 +96,10 @@ def clip_loss(im_embs,text_features,args,query_array):
 def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):    
     resizer = T.Resize(224)
 
-    losses = []
     if args.query_array in query_arrays:
         query_array = query_arrays[args.query_array]
     else:
         query_array = [args.query_array]
-
     query_array = query_array*args.num_views
 
     print('query array:',query_array)
@@ -111,58 +109,41 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         os.makedirs(f'{args.query_dir}/{args.id}')
 
     wrapper = Wrapper(args, clip_model, autoencoder, latent_flow_model, renderer, resizer, query_array)
-
     wrapper = nn.DataParallel(wrapper).to(args.device)
-
-    start_time = time.time()
-    best_hard_loss = float('inf')
     wrapper_optimizer = optim.Adam(wrapper.parameters(), lr=args.learning_rate)
+
+    best_hard_loss = float('inf')
     
     for iter in range(20000):
+        wrapper_optimizer.zero_grad()
+        with torch.cuda.amp.autocast():
+            wrapper.module.autoencoder.train()
+            out_3d, im_samples, im_embs = wrapper(text_features)
+            loss,similarity_loss = clip_loss(im_embs, text_features, args, query_array)
+        loss.backward()
+        wrapper_optimizer.step()
+        if not iter%10:
+            args.writer.add_scalar('Loss/train', loss.item(), iter)
+            args.writer.add_scalar('Loss/similarity_loss',strict_loss.item(),iter)          
 
-        if (not iter%500) and iter!=0:
+        if (not iter%500)
+            grid = torchvision.utils.make_grid(im_samples, nrow=3)
+            args.writer.add_image('images', grid, iter)
+            
             with torch.cuda.amp.autocast():
                 with torch.no_grad():
                     wrapper.module.autoencoder.eval()
                     do_eval(query_array, args,iter, text_features,best_hard_loss,wrapper,clip_model)
                     
-        if not (iter%5000) and iter!=0:
-            # save encoder and latent flow network
-            torch.save(wrapper.module.latent_flow_model.state_dict(), '%s/%s/flow_model_%s.pt' % (args.query_dir,args.id,iter))
-            torch.save(wrapper.module.autoencoder.state_dict(), '%s/%s/aencoder_%s.pt' % (args.query_dir,args.id,iter))
+            if not (iter%9) and iter!=0:
+                # save encoder and latent flow network
+                torch.save(wrapper.module.latent_flow_model.state_dict(), '%s/%s/flow_model_%s.pt' % (args.query_dir,args.id,iter))
+                torch.save(wrapper.module.autoencoder.state_dict(), '%s/%s/aencoder_%s.pt' % (args.query_dir,args.id,iter))
 
-        wrapper_optimizer.zero_grad()
-        
-        with torch.cuda.amp.autocast():
-            wrapper.module.autoencoder.train()
-            out_3d, im_samples, im_embs = wrapper(text_features)
-            loss,strict_loss = clip_loss(im_embs, text_features, args, query_array)
-            #strict loss doesn't include contrative term
-        if(iter % 100 == 0):
-            print('iter: ', iter, 'loss: ', loss.item())
-
-        loss.backward()
-        losses.append(loss.detach().item())
-        
-        if args.use_tensorboard and not iter%50:
-            if not iter%50:
-                grid = torchvision.utils.make_grid(im_samples, nrow=3)
-                args.writer.add_image('images', grid, iter)
-            args.writer.add_scalar('Loss/train', loss.item(), iter)
-            args.writer.add_scalar('Loss/strict_train_loss',strict_loss.item(),iter)          
-        
-        wrapper_optimizer.step()
-        if not iter:
-            print('train time:', time.time()-start_time)
-        if not iter%500:
-            print(iter)
             
     #save latent flow and AE networks
     torch.save(wrapper.module.state_dict(), '%s/%s/final_flow_model.pt' % (args.query_dir,args.id))
     torch.save(wrapper.module.autoencoder.encoder.state_dict(), '%s/%s/final_aencoder.pt' % (args.query_dir,args.id))
-    
-    print(losses)
-
 
 def main(args):
     helper.set_seed(args.seed)
