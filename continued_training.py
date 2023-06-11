@@ -25,7 +25,8 @@ import sys
 import numpy as np
 import torch.nn as nn
 
-from continued_utils import query_arrays, make_writer, get_networks, get_local_parser, get_clip_model,get_text_embeddings
+from continued_utils import query_arrays, make_writer, get_networks,\
+                         get_local_parser, get_clip_model,get_text_embeddings,set_seed
 import PIL
 import pdb
 
@@ -67,21 +68,23 @@ def clip_loss(im_embs,text_features,args,query_array):
     #normalize im_embs
     im_embs = im_embs / im_embs.norm(dim=-1, keepdim=True)
     
-    #compute all pair cosine similarity between im_embs and text_features
+    #compute all pairs cosine similarity between im_embs and text_features
     cos_sim = torch.mm(im_embs, text_features.t())
     
-    #mask out similarities for the same text query
+    #If the batch contains multiple instances of the same text query 
+    #we want to mask out the similarity between identical instances
     k = len(set(query_array))
-    n = cos_sim.shape[0]
-    mask = torch.zeros_like(cos_sim)
+    if k<len(query_array):
+        n = cos_sim.shape[0]
+        mask = torch.zeros_like(cos_sim)
 
-    for i in range(1,args.num_views):
-        upper_diag = torch.diag(torch.ones(n - k*i), diagonal=k*i).to(args.device)
-        lower_diag = torch.diag(torch.ones(n - k*i), diagonal=-1*k*i).to(args.device)
-        mask = mask +  upper_diag + lower_diag
-    mask = 1 - mask
-    mask = mask.to(args.device)
-    cos_sim = cos_sim * mask
+        for i in range(1,args.num_views):
+            upper_diag = torch.diag(torch.ones(n - k*i), diagonal=k*i).to(args.device)
+            lower_diag = torch.diag(torch.ones(n - k*i), diagonal=-1*k*i).to(args.device)
+            mask = mask +  upper_diag + lower_diag
+        mask = 1 - mask
+        mask = mask.to(args.device)
+        cos_sim = cos_sim * mask
     
     #Compute contrastive loss
     probs = torch.softmax(args.temp*cos_sim, dim=1)
@@ -146,13 +149,7 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     torch.save(wrapper.module.autoencoder.encoder.state_dict(), '%s/%s/final_aencoder.pt' % (args.query_dir,args.id))
 
 def main(args):
-    helper.set_seed(args.seed)
-    np.random.seed(args.seed)
-    torch.manual_seed(args.seed)
-    torch.cuda.manual_seed(args.seed)
-    torch.cuda.manual_seed_all(args.seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+    set_seed(args.seed)
 
     args.writer = make_writer(args)
     args.id = args.writer.log_dir.split('runs/')[-1]

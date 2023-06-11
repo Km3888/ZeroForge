@@ -7,6 +7,7 @@ import torch
 import sys
 import os
 import random
+from utils import helper
 
 query_arrays = {
                 "with_original" : ["spoon","fork","wineglass","knife","chair","airplane"],
@@ -161,3 +162,12 @@ def get_clip_model(args):
     args.n_px = input_resolution
     args.cond_emb_dim = cond_emb_dim
     return args, clip_model
+
+def set_seed(seed)
+    helper.set_seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
