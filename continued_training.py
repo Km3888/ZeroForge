@@ -25,7 +25,7 @@ import sys
 import numpy as np
 import torch.nn as nn
 
-from continued_utils import query_arrays, make_writer, get_networks, get_local_parser, get_clip_model,get_text_embeddings,make_init_dict
+from continued_utils import query_arrays, make_writer, get_networks, get_local_parser, get_clip_model,get_text_embeddings
 import PIL
 import pdb
 
@@ -182,8 +182,7 @@ def main(args):
     print("Using device: ", device)
     args, clip_model = get_clip_model(args) 
 
-    init_dict = make_init_dict()[args.init]
-    net,latent_flow_network = get_networks(args,init_dict)
+    net,latent_flow_network = get_networks(args)
 
     param_dict={'device':args.device,'cube_len':args.num_voxels}
     if args.renderer == 'ea':

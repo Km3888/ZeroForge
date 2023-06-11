@@ -39,29 +39,12 @@ def get_prompts(obj, num_prompts):
     prompts = []
     for i in range(num_prompts):
         prompts.append(random.choice(prompts_prefix_pool) + obj)
-    return prompts
-
-def make_init_dict():
-    og_init = {"ae_path":"models/autoencoder/best_iou.pt", "flow_path":"models/prior/best.pt","num_blocks":5,"num_hidden":1024,"emb_dim":128}
-    init_1 = {"ae_path":"New__Autoencoder_Shapenet_Voxel_Implicit_128_add_noise_1/checkpoints/best_iou.pt", \
-                "flow_path":"New__Autoencoder_Shapenet_Voxel_Implicit_128_add_noise_1/Clip_Conditioned_realnvp_half_8_best_iou_1_B-32_1024_1/checkpoints/best.pt",\
-                "num_blocks":8,"num_hidden":1024,"emb_dim":128}
-    init_2 = {"ae_path":"New__Autoencoder_Shapenet_Voxel_Implicit_256_add_noise_1/checkpoints/best_iou.pt", \
-                "flow_path":"New__Autoencoder_Shapenet_Voxel_Implicit_256_add_noise_1/Clip_Conditioned_realnvp_half_8_best_iou_1_B-32_1024_1/checkpoints/best.pt",\
-                "num_blocks":8,"num_hidden":1024,"emb_dim":256}
-    init_3 = {"ae_path":"New__Autoencoder_Shapenet_Voxel_Implicit_256_add_noise_1/checkpoints/best_iou.pt", \
-                "flow_path":"New__Autoencoder_Shapenet_Voxel_Implicit_256_add_noise_1/Clip_Conditioned_realnvp_half_8_best_iou_1_B-32_2048_1/checkpoints/best.pt",\
-                "num_blocks":8,"num_hidden":2048,"emb_dim":256}
-    
-    init_dict = {"og_init":og_init,"init_1":init_1,"init_2":init_2,"init_3":init_3}
-    return init_dict
-    
+    return prompts    
 
 def make_writer(args):
     if not args.use_tensorboard:
         return None
     tensorboard_comment = 'q=%s_lr=%s_beta=%s_gpu=%s_baseline=%s_v=%s_k=%s_r=%s_s=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized,args.num_voxels,args.num_views,args.renderer,args.seed)
-    tensorboard_comment += "_init=%s" % args.init
     if args.use_zero_conv:
         tensorboard_comment += '_zero_conv'
     if args.contrast_lambda > 0:
@@ -76,29 +59,19 @@ def make_writer(args):
     assert args.renderer in ['ea','nvr+']
     return SummaryWriter(log_dir=log_dir)
 
-def get_networks(args,init_dict):
-    args.emb_dims = init_dict["emb_dim"]
-    args.num_blocks = init_dict["num_blocks"]
-    args.num_hidden = init_dict["num_hidden"]
+def get_networks(args):
     net = autoencoder.EncoderWrapper(args).to(args.device)    
     latent_flow_network = latent_flows.get_generator(args.emb_dims, args.cond_emb_dim, args.device, flow_type=args.flow_type, num_blocks=args.num_blocks, num_hidden=args.num_hidden)
     if args.use_zero_conv:
         net.encoder.decoder = autoencoder.ZeroConvDecoder(net.encoder.decoder)
         net = net.to(args.device)
     if not args.uninitialized:
-        sys.stdout.flush()
-        checkpoint_nf_path = os.path.join(args.init_base + "/" + init_dict["flow_path"])
+        checkpoint_nf_path = os.path.join(args.init_base + "/" + "models/prior/best.pt")
         checkpoint = torch.load(checkpoint_nf_path, map_location=args.device)
         latent_flow_network.load_state_dict(checkpoint['model'])
-        checkpoint = torch.load(args.init_base +"/"+ init_dict["ae_path"], map_location=args.device)
+        checkpoint = torch.load(args.init_base +"/"+ "models/autoencoder/best_iou.pt", map_location=args.device)
         net.load_state_dict(checkpoint['model'])
         net.eval()
-        #calculate total parameters in autoencoder and latent flow
-        total_params_ae = sum(p.numel() for p in net.parameters() if p.requires_grad)
-        total_params_nf = sum(p.numel() for p in latent_flow_network.parameters() if p.requires_grad)
-        print("Total parameters in Autoencoder: %s" % total_params_ae)
-        print("Total parameters in Latent Flow: %s" % total_params_nf)
-        print("Total parameters in initialization: %s" % (total_params_ae + total_params_nf))
     return net, latent_flow_network
 
 def get_local_parser(mode="args"):
@@ -122,7 +95,6 @@ def get_local_parser(mode="args"):
     parser.add_argument("--num_voxels",  type=int, default=32, help='number of voxels')
     # parser.add_argument("--threshold",  type=float, default=0.5, help='threshold for voxelization')
     parser.add_argument("--renderer",  type=str, default='ea')
-    parser.add_argument("--init",  type=str, default="og_init", help='what is the initialization')
     parser.add_argument("--init_base",  type=str, default=" ", help='where is the initialization')
     parser.add_argument("--setting", type=int, default=None)
     parser.add_argument("--slurm_id", type=int, default=None)
