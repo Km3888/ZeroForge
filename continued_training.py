@@ -8,7 +8,7 @@ import torch.optim as optim
 from networks.wrapper import Wrapper
 
 import clip
-from test_post_clip import voxel_save,generate_all_queries_3, generate_all_queries_2
+from test_post_clip import voxel_save
 
 from train_post_clip import get_local_parser, get_clip_model
 
@@ -103,10 +103,6 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         query_array = [args.query_array]
 
     query_array = query_array*args.num_views
-    if args.query_array == "subset":
-        all_queries,_ = generate_all_queries_3()
-    if args.query_array == "superset":
-        all_queries,_ = generate_all_queries_2()
 
     print('query array:',query_array)
     text_features = get_text_embeddings(args,clip_model,query_array).detach()
@@ -123,9 +119,6 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     wrapper_optimizer = optim.Adam(wrapper.parameters(), lr=args.learning_rate)
     
     for iter in range(20000):
-        if args.query_array == "subset" or args.query_array == "superset":
-            queries = random.choices(all_queries,k=20)
-            text_features = get_text_embeddings(args,clip_model, queries).detach()
 
         if (not iter%500) and iter!=0:
             with torch.cuda.amp.autocast():
