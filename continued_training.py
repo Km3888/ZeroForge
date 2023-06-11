@@ -28,69 +28,27 @@ import torch.nn as nn
 from continued_utils import query_arrays, make_writer, get_networks, get_local_parser, get_clip_model,get_text_embeddings,make_init_dict
 import PIL
 import pdb
-       
-def evaluate_true_voxel(out_3d_hard,args,clip_model,text_features,i,query_array):
-    # code for saving the "true" voxel image
-    voxel_ims=[]
-    num_shapes = out_3d_hard.shape[0]
-    n_unique = len(set(query_array))
-    num_shapes = min([n_unique, 3])
-    for shape in range(num_shapes):
-        save_path = '%s/%s/sample_%s_%s.png' % (args.query_dir,args.id,i,shape)
-        voxel_save(out_3d_hard[shape].squeeze().detach().cpu(), None, out_file=save_path)
-        # load the image that was saved and transform it to a tensor
-        voxel_im = PIL.Image.open(save_path).convert('RGB')
-        voxel_tensor = T.ToTensor()(voxel_im)
-        voxel_ims.append(voxel_tensor.unsqueeze(0))
-    
-    voxel_ims = torch.cat(voxel_ims,0)
-    grid = torchvision.utils.make_grid(voxel_ims, nrow=num_shapes)
 
-    for shape in range(num_shapes):
-        save_path = '%s/%s/sample_%s_%s.png' % (args.query_dir,args.id,i,shape)
-        # os.remove(save_path)
 
-    if args.use_tensorboard:
-        args.writer.add_image('voxel image', grid, i)
-    # #convert to 224x224 image with 3 channels
-    voxel_tensor = T.Resize((224,224))(voxel_ims)
-
-    # get CLIP embedding
-    # voxel_image_embedding = clip_model(voxel_tensor.to(args.device).type(clip_model_type))
-    voxel_image_embedding = clip_model.encode_image(voxel_tensor.to(args.device))
-    voxel_similarity = torch.cosine_similarity(text_features[:num_shapes], voxel_image_embedding).mean()
-    return voxel_similarity
-    
 def do_eval(query_array,args,iter,text_features,best_hard_loss,wrapper,clip_model):    
     with torch.no_grad():
-      out_3d_hard, rgbs_hard, hard_im_embeddings = wrapper(text_features,no_bin=args.no_binarization,hard=True)
-    #save out_3d to numpy file
-    if args.renderer=='ea':
-        #baseline renderer gives 3 dimensions
-        hard_loss = -1*torch.cosine_similarity(text_features.unsqueeze(1).expand(-1,3,-1).reshape(-1,512),hard_im_embeddings).mean()
-    else:
-        hard_loss = -1*torch.cosine_similarity(text_features,hard_im_embeddings).mean()
-        
+      out_3d_hard, rgbs_hard, _ = wrapper(text_features,hard=True)    
+    num_shapes = out_3d_hard.shape[0]    
     if args.use_tensorboard:
-        args.writer.add_scalar('Loss/hard_loss', hard_loss, iter)
-
-    if hard_loss<best_hard_loss:
-        save_images(rgbs_hard,iter,args,query_array)
-        best_hard_loss = hard_loss
+        plt_ims = plt_render(out_3d_hard,iter)
+        grid = torchvision.utils.make_grid(voxel_ims, nrow=num_shapes)
+        plt_embs = clip_model.encode_image(voxel_tensor.to(args.device))
+        render_sim_loss = -1*torch.cosine_similarity(text_features[:num_shapes], plt_embs).mean()
+        args.writer.add_image('voxel image', grid, i)
     
-    gc.collect()
-    torch.cuda.empty_cache()
-    
-    return best_hard_loss
+    return render_loss
 
-def evaluate_true_voxel(out_3d_hard,args,clip_model,text_features,i,query_array):
-    # code for saving the "true" voxel image
+def plt_render(out_3d_hard,iteration):
+    # code for saving the binary voxel image renders
     voxel_ims=[]
     num_shapes = out_3d_hard.shape[0]
-    n_unique = len(set(query_array))
-    num_shapes = min([n_unique, 3])
-    for shape in range(num_shapes):
-        save_path = '/scratch/km3888/queries/%s/sample_%s_%s.png' % (args.id,i,shape)
+    for shape in range(3):
+        save_path = '/scratch/km3888/queries/%s/sample_%s_%s.png' % (args.id,iteration,shape)
         voxel_save(out_3d_hard[shape].squeeze().detach().cpu(), None, out_file=save_path)
         # load the image that was saved and transform it to a tensor
         voxel_im = PIL.Image.open(save_path).convert('RGB')
@@ -98,20 +56,9 @@ def evaluate_true_voxel(out_3d_hard,args,clip_model,text_features,i,query_array)
         voxel_ims.append(voxel_tensor.unsqueeze(0))
     
     voxel_ims = torch.cat(voxel_ims,0)
-    grid = torchvision.utils.make_grid(voxel_ims, nrow=num_shapes)
 
-    for shape in range(num_shapes):
-        save_path = '/scratch/km3888/queries/%s/sample_%s_%s.png' % (args.id,i,shape)
-        os.remove(save_path)
-
-    if args.use_tensorboard:
-        args.writer.add_image('voxel image', grid, i)
-    # #convert to 224x224 image with 3 channels
-    voxel_tensor = T.Resize((224,224))(voxel_ims)
-    # get CLIP embedding
-    voxel_image_embedding = clip_model.encode_image(voxel_tensor.to(args.device))
-    voxel_similarity = torch.cosine_similarity(text_features[:num_shapes], voxel_image_embedding).mean()
-    return voxel_similarity
+    return voxel_ims
+    
 
 def clip_loss(im_embs,text_features,args,query_array):
     #start with simple similarity loss
@@ -155,12 +102,6 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     else:
         query_array = [args.query_array]
 
-    #check if file json_name.json exists
-    if not os.path.exists("json_name.json"):
-        print("GPT-3 prompt file not found. Generating prompts...")
-        generate_gpt_prompts(["wineglass","spoon","fork","knife","screwdriver","hammer","pencil","screw","plate","mushroom","umbrella","thimble","sombrero","sandal"])
-    else:
-        print("GPT-3 prompt file found. Skipping prompt generation...")
     query_array = query_array*args.num_views
     if args.query_array == "subset":
         all_queries,_ = generate_all_queries_3()
@@ -182,13 +123,11 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
     wrapper_optimizer = optim.Adam(wrapper.parameters(), lr=args.learning_rate)
     
     for iter in range(20000):
-        if args.use_gpt_prompts:
-            text_features = get_text_embeddings(args,clip_model, query_array).detach()
         if args.query_array == "subset" or args.query_array == "superset":
             queries = random.choices(all_queries,k=20)
             text_features = get_text_embeddings(args,clip_model, queries).detach()
 
-        if not iter%500:
+        if (not iter%500) and iter!=0:
             with torch.cuda.amp.autocast():
                 with torch.no_grad():
                     wrapper.module.autoencoder.eval()
@@ -203,7 +142,7 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         
         with torch.cuda.amp.autocast():
             wrapper.module.autoencoder.train()
-            out_3d, im_samples, im_embs = wrapper(text_features,no_bin=args.no_binarization,background = args.background)
+            out_3d, im_samples, im_embs = wrapper(text_features,background = args.background)
             loss,strict_loss = clip_loss(im_embs, text_features, args, query_array)
             #strict loss doesn't include contrative term
         if(iter % 100 == 0):
