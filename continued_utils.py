@@ -39,6 +39,7 @@ def get_query_array(args):
     else:
         query_array = [args.query_array]
     query_array = query_array*args.num_views
+    args.unique = len(set(query_array))
     return query_array
 
 def get_prompts(obj, num_prompts):

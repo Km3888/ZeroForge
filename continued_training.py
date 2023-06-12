@@ -30,26 +30,8 @@ from continued_utils import make_writer, get_networks,\
 import PIL
 import pdb
 
-
-def do_eval(query_array,args,iteration,text_features,zf_model,clip_model):
-    query_array, args,iter, text_features,zf_model,clip_model
-    #Collects training metrics and saves images for tensorboard
-    with torch.no_grad():
-      out_3d_hard, rgbs_hard, _ = zf_model(text_features,hard=True)
-    num_shapes = out_3d_hard.shape[0]    
-    if args.use_tensorboard:
-        # matplotlib can gives better-quality 3D rendering but is not differentiable and requires binary voxels
-        # we compute these renderings to give a better sense of the model's performance
-        plt_ims = plt_render(out_3d_hard,iter)
-        grid = torchvision.utils.make_grid(plt_ims, nrow=num_shapes)
-        plt_ims = T.Resize((224,224))(plt_ims)
-        plt_embs = clip_model.encode_image(plt_ims.to(args.device))
-        render_sim_loss = -1*torch.cosine_similarity(text_features[:num_shapes], plt_embs).mean()
-        args.writer.add_image('voxel image', grid, iteration)
-        args.writer.add_scalar('render_sim_loss', render_sim_loss, iteration)
-    
-def clip_loss(im_embs,text_features,args,query_array):
-    # computes loss function for training ZeroForge
+# computes loss function for training ZeroForge
+def clip_loss(im_embs,text_features):
 
     #start with simple similarity loss
     loss = -1*torch.cosine_similarity(text_features,im_embs).mean()
@@ -62,7 +44,7 @@ def clip_loss(im_embs,text_features,args,query_array):
     
     #If the batch contains multiple instances of the same text query 
     #we want to mask out the similarity between identical instances
-    k = len(set(query_array))
+    k = args.unique #number of unique text queries
     if k<len(query_array):
         n = cos_sim.shape[0]
         mask = torch.zeros_like(cos_sim)
@@ -84,6 +66,24 @@ def clip_loss(im_embs,text_features,args,query_array):
     #compute full training loss
     train_loss = loss + contrast_loss * args.contrast_lambda
     return train_loss,loss
+
+def do_eval(query_array,args,iteration,text_features,zf_model,clip_model):
+    query_array, args,iter, text_features,zf_model,clip_model
+    #Collects training metrics and saves images for tensorboard
+    with torch.no_grad():
+      out_3d_hard, rgbs_hard, _ = zf_model(text_features,hard=True)
+    num_shapes = out_3d_hard.shape[0]    
+    if args.use_tensorboard:
+        # matplotlib can gives better-quality 3D rendering but is not differentiable and requires binary voxels
+        # we compute these renderings to give a better sense of the model's performance
+        plt_ims = plt_render(out_3d_hard,iter)
+        grid = torchvision.utils.make_grid(plt_ims, nrow=num_shapes)
+        plt_ims = T.Resize((224,224))(plt_ims)
+        plt_embs = clip_model.encode_image(plt_ims.to(args.device))
+        render_sim_loss = -1*torch.cosine_similarity(text_features[:num_shapes], plt_embs).mean()
+        args.writer.add_image('voxel image', grid, iteration)
+        args.writer.add_scalar('render_sim_loss', render_sim_loss, iteration)
+    
 
 def train_zf(args,clip_model,autoencoder,latent_flow_model,renderer):    
     resizer = T.Resize(224)
