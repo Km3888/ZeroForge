@@ -25,30 +25,36 @@ import sys
 import numpy as np
 import torch.nn as nn
 
-from continued_utils import query_arrays, make_writer, get_networks,\
-                         get_local_parser, get_clip_model,get_text_embeddings,set_seed
+from continued_utils import make_writer, get_networks,\
+                         get_local_parser, get_clip_model,get_query_array,\
+                         get_text_embeddings,set_seed
 import PIL
 import pdb
 
 
-def do_eval(query_array,args,iter,text_features,best_hard_loss,wrapper,clip_model):    
+def do_eval(query_array,args,iteration,text_features,best_hard_loss,wrapper,clip_model):
+    #Collects training metrics and saves images for tensorboard
     with torch.no_grad():
-      out_3d_hard, rgbs_hard, _ = wrapper(text_features,hard=True)    
+      out_3d_hard, rgbs_hard, _ = wrapper(text_features,hard=True)
     num_shapes = out_3d_hard.shape[0]    
     if args.use_tensorboard:
+        # matplotlib can gives better-quality 3D rendering but is not differentiable and requires binary voxels
+        # we compute these renderings to give a better sense of the model's performance
         plt_ims = plt_render(out_3d_hard,iter)
-        grid = torchvision.utils.make_grid(voxel_ims, nrow=num_shapes)
-        plt_embs = clip_model.encode_image(voxel_tensor.to(args.device))
+        grid = torchvision.utils.make_grid(plt_ims, nrow=num_shapes)
+        plt_ims = T.Resize((224,224))(plt_ims)
+        plt_embs = clip_model.encode_image(plt_ims.to(args.device))
         render_sim_loss = -1*torch.cosine_similarity(text_features[:num_shapes], plt_embs).mean()
-        args.writer.add_image('voxel image', grid, i)
+        args.writer.add_image('voxel image', grid, iteration)
+        args.writer.add_scalar('render_sim_loss', render_sim_loss, iteration)
     
-    return render_loss
-
 def plt_render(out_3d_hard,iteration):
     # code for saving the binary voxel image renders
+    # voxel_save is a function that takes in a voxel tensor and saves its rendering as a png
+    # we save the renderings and then load them back in as tensors to display in tensorboard
     voxel_ims=[]
     num_shapes = out_3d_hard.shape[0]
-    for shape in range(3):
+    for shape in range(min(num_shapes,3)):
         save_path = '/scratch/km3888/queries/%s/sample_%s_%s.png' % (args.id,iteration,shape)
         voxel_save(out_3d_hard[shape].squeeze().detach().cpu(), None, out_file=save_path)
         # load the image that was saved and transform it to a tensor
@@ -62,6 +68,8 @@ def plt_render(out_3d_hard,iteration):
     
 
 def clip_loss(im_embs,text_features,args,query_array):
+    # computes loss function for training ZeroForge
+
     #start with simple similarity loss
     loss = -1*torch.cosine_similarity(text_features,im_embs).mean()
     
@@ -99,12 +107,7 @@ def clip_loss(im_embs,text_features,args,query_array):
 def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):    
     resizer = T.Resize(224)
 
-    if args.query_array in query_arrays:
-        query_array = query_arrays[args.query_array]
-    else:
-        query_array = [args.query_array]
-    query_array = query_array*args.num_views
-
+    query_array = get_query_array(args)
     print('query array:',query_array)
     text_features = get_text_embeddings(args,clip_model,query_array).detach()
     # make directory for saving images with name of the text query using os.makedirs
@@ -127,9 +130,9 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
         wrapper_optimizer.step()
         if not iter%10:
             args.writer.add_scalar('Loss/train', loss.item(), iter)
-            args.writer.add_scalar('Loss/similarity_loss',strict_loss.item(),iter)          
+            args.writer.add_scalar('Loss/similarity_loss',similarity_loss.item(),iter)          
 
-        if (not iter%500)
+        if (not iter%500):
             grid = torchvision.utils.make_grid(im_samples, nrow=3)
             args.writer.add_image('images', grid, iter)
             

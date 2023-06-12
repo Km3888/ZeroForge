@@ -8,32 +8,21 @@ import sys
 import os
 import random
 from utils import helper
-
-query_arrays = {
-                "with_original" : ["spoon","fork","wineglass","knife","chair","airplane"],
-                "orthogonal" : ["round spoon","donut","barbell","american football"],
-                "wineglass": ["wineglass"],
-                "easy_5":["spoon","knife","christmas tree","donut","umbrella"],
-                "spoon": ["spoon"],
-                "fork": ["fork"],
-                "hammer": ["hammer"],
-                "two": ["spoon","fork"],
-                "three": ["spoon","fork","knife"],
-                "four": ["spoon","fork","wineglass","knife"],
-                "six": ["wineglass","spoon","fork","knife","screwdriver","hammer"],
-                "nine": ["wineglass","spoon","fork","knife","screwdriver","hammer","soccer ball", "football","plate"],
-                "six": ['wineglass','spoon','fork','knife','screwdriver','hammer'],
-                "nine": ['wineglass','spoon','fork','knife','screwdriver','hammer','soccer ball','football','plate'],
-                "thirteen": ["wineglass","spoon","fork","donut","screwdriver","hammer","pencil","screw","mushroom","umbrella","thimble","sombrero","sandal"],
-                "fourteen": ["wineglass","spoon","fork","knife","screwdriver","hammer","pencil","screw","plate","mushroom","umbrella","thimble","sombrero","sandal"],
-                "easy_five_with_original": ["spoon","knife","Christmas tree","barbell","umbrella", "chair","airplane","boat","table","television"],
-                "halfsy_1": ["chair","airplane","boat","table","television"],
-                "halfsy_2": ["spoon","knife","Christmas tree","barbell","umbrella"],
-                "easy_3": ["spoon","knife","umbrella"]
-}
+import json
+import numpy as np
 
 prompts_prefix_pool = ["a photo of a ", "a "]
 
+
+def get_query_array(args):
+    with open("query_arrays.json", "r") as json_file:
+        query_arrays = json.load(json_file)
+    if args.query_array in query_arrays:
+        query_array = query_arrays[args.query_array]
+    else:
+        query_array = [args.query_array]
+    query_array = query_array*args.num_views
+    return query_array
 
 def get_prompts(obj, num_prompts):
     #get prompts for each object
@@ -163,7 +152,7 @@ def get_clip_model(args):
     args.cond_emb_dim = cond_emb_dim
     return args, clip_model
 
-def set_seed(seed)
+def set_seed(seed):
     helper.set_seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
