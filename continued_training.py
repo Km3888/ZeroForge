@@ -27,7 +27,7 @@ import torch.nn as nn
 
 from continued_utils import make_writer, get_networks,\
                          get_local_parser, get_clip_model,get_query_array,\
-                         get_text_embeddings,set_seed
+                         get_text_embeddings,set_seed, save_networks
 import PIL
 import pdb
 
@@ -104,6 +104,7 @@ def clip_loss(im_embs,text_features,args,query_array):
     train_loss = loss + contrast_loss * args.contrast_lambda
     return train_loss,loss
 
+
 def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):    
     resizer = T.Resize(224)
 
@@ -141,15 +142,9 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
                     wrapper.module.autoencoder.eval()
                     do_eval(query_array, args,iter, text_features,best_hard_loss,wrapper,clip_model)
                     
-            if not (iter%9) and iter!=0:
-                # save encoder and latent flow network
-                torch.save(wrapper.module.latent_flow_model.state_dict(), '%s/%s/flow_model_%s.pt' % (args.query_dir,args.id,iter))
-                torch.save(wrapper.module.autoencoder.state_dict(), '%s/%s/aencoder_%s.pt' % (args.query_dir,args.id,iter))
-
-            
-    #save latent flow and AE networks
-    torch.save(wrapper.module.state_dict(), '%s/%s/final_flow_model.pt' % (args.query_dir,args.id))
-    torch.save(wrapper.module.autoencoder.encoder.state_dict(), '%s/%s/final_aencoder.pt' % (args.query_dir,args.id))
+            if not (iter%5000) and iter!=0:
+                save_networks(args,iter,wrapper)
+    save_networks(args,iter,wrapper)
 
 def main(args):
     set_seed(args.seed)
