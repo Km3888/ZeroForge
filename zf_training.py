@@ -131,8 +131,8 @@ def main(args):
     net,latent_flow_network = get_networks(args)
 
     # make directory for saving images with name of the text query using os.makedirs
-    if not os.path.exists(f'{args.query_dir}/{args.id}'):
-        os.makedirs(f'{args.query_dir}/{args.id}')
+    if not os.path.exists(f'{args.log_dir}/{args.id}'):
+        os.makedirs(f'{args.log_dir}/{args.id}')
 
     # Baseline ea renderer uses ray-trace (instead of nn) to get object silhouette
     # Doesn't give as good of renderings as NVR+ but can be useful for debugging/testing

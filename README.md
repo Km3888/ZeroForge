@@ -42,19 +42,17 @@ This downloads a folder of their experimental results, the only part of which we
 
 ## Neural Voxel Renderer
 
-The Neural Voxel Renderer+ ([insert link]) submodule will be installed with ZeroForge. To get the weights for the NVR+ model install them with [insert installation instructions]
+We use the Neural Voxel Renderer+ model described [here](https://arxiv.org/abs/1912.04591). For compatibility with our other components, we wrote a PyTorch implementation using the exact same architecture and weights found in the official [tensorflow implementation](https://github.com/tensorflow/graphics/tree/master/tensorflow_graphics/projects/neural_voxel_renderer). To get the weights for the NVR+ model download them to a directory` NVR_WEIGHTS` with.
+
+[insert installation instructions] 
 
 ## Running ZeroForge
 The main file for training is `zf_training.py` which performs training on an array of text queries. Results are logged using tensorboard in the specified log directory.
 
 ```
-python zf_training.py --query_array [QUERY] --log_dir [LOGDIR] 
+python zf_training.py --query_array [QUERY] --log_dir [LOGDIR] --nvr_renderer_checkpoint [NVR_WEIGHTS]
 ```
-The query arrays we used for training ZeroForge are stored in `query_arrays.json` by name, but any set of text queries can be trained on after being added to the .json file.
-
-## Inference
-
-
+The `query_array` argument specifies by name a uniform distribution over a set of text queries. For instance, the query array "three" learns a simple distribution over cutlery prompts. The query arrays we used for training ZeroForge are stored in `query_arrays.json` by name, but any set of text queries can be specified by adding it to the .json file.
 
 
 
