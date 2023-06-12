@@ -2,9 +2,9 @@ from utils import visualization
 import torch
 import torch.nn as nn
 
-class Wrapper(nn.Module):
+class ZeroForge(nn.Module):
     def __init__(self, args, clip_model, autoencoder, latent_flow_model, renderer, resizer, query_array):
-        super(Wrapper, self).__init__()
+        super(ZeroForge, self).__init__()
         self.clip_model = clip_model
 
         #freeze clip model
@@ -26,8 +26,8 @@ class Wrapper(nn.Module):
         self.query_array = query_array
         self.args = args
 
-    def forward(self, text_features,hard=False,background='default'):
-        self.latent_flow_model.eval() # has to be in .eval() mode for the sampling to work (which is bad but whatever)
+    def forward(self, text_features,hard=False):
+        self.latent_flow_model.eval()
         
         voxel_size = self.args.num_voxels
         batch_size = text_features.shape[0]

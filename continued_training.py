@@ -5,7 +5,7 @@ import time
 import torch
 import torch.optim as optim
 
-from networks.wrapper import Wrapper
+from networks.zeroforge_model import ZeroForge
 
 import clip
 from test_post_clip import voxel_save
@@ -32,10 +32,11 @@ import PIL
 import pdb
 
 
-def do_eval(query_array,args,iteration,text_features,best_hard_loss,wrapper,clip_model):
+def do_eval(query_array,args,iteration,text_features,zf_model,clip_model):
+    query_array, args,iter, text_features,zf_model,clip_model
     #Collects training metrics and saves images for tensorboard
     with torch.no_grad():
-      out_3d_hard, rgbs_hard, _ = wrapper(text_features,hard=True)
+      out_3d_hard, rgbs_hard, _ = zf_model(text_features,hard=True)
     num_shapes = out_3d_hard.shape[0]    
     if args.use_tensorboard:
         # matplotlib can gives better-quality 3D rendering but is not differentiable and requires binary voxels
@@ -65,7 +66,6 @@ def plt_render(out_3d_hard,iteration):
     voxel_ims = torch.cat(voxel_ims,0)
 
     return voxel_ims
-    
 
 def clip_loss(im_embs,text_features,args,query_array):
     # computes loss function for training ZeroForge
@@ -104,31 +104,26 @@ def clip_loss(im_embs,text_features,args,query_array):
     train_loss = loss + contrast_loss * args.contrast_lambda
     return train_loss,loss
 
-
-def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):    
+def train_zf(args,clip_model,autoencoder,latent_flow_model,renderer):    
     resizer = T.Resize(224)
 
     query_array = get_query_array(args)
-    print('query array:',query_array)
     text_features = get_text_embeddings(args,clip_model,query_array).detach()
-    # make directory for saving images with name of the text query using os.makedirs
-    if not os.path.exists(f'{args.query_dir}/{args.id}'):
-        os.makedirs(f'{args.query_dir}/{args.id}')
 
-    wrapper = Wrapper(args, clip_model, autoencoder, latent_flow_model, renderer, resizer, query_array)
-    wrapper = nn.DataParallel(wrapper).to(args.device)
-    wrapper_optimizer = optim.Adam(wrapper.parameters(), lr=args.learning_rate)
-
-    best_hard_loss = float('inf')
-    
+    zf_model = ZeroForge(args, clip_model, autoencoder, latent_flow_model, renderer, resizer, query_array)
+    zf_model = nn.DataParallel(zf_model).to(args.device)
+    zf_optimizer = optim.Adam(zf_model.parameters(), lr=args.learning_rate)    
     for iter in range(20000):
-        wrapper_optimizer.zero_grad()
+        # Main training loop for ZeroForge
+        zf_optimizer.zero_grad()
         with torch.cuda.amp.autocast():
-            wrapper.module.autoencoder.train()
-            out_3d, im_samples, im_embs = wrapper(text_features)
+            zf_model.module.autoencoder.train()
+            out_3d, im_samples, im_embs = zf_model(text_features)
             loss,similarity_loss = clip_loss(im_embs, text_features, args, query_array)
         loss.backward()
-        wrapper_optimizer.step()
+        zf_optimizer.step()
+
+        # Log training metrics/save checkpoints
         if not iter%10:
             args.writer.add_scalar('Loss/train', loss.item(), iter)
             args.writer.add_scalar('Loss/similarity_loss',similarity_loss.item(),iter)          
@@ -139,12 +134,13 @@ def test_train(args,clip_model,autoencoder,latent_flow_model,renderer):
             
             with torch.cuda.amp.autocast():
                 with torch.no_grad():
-                    wrapper.module.autoencoder.eval()
-                    do_eval(query_array, args,iter, text_features,best_hard_loss,wrapper,clip_model)
+                    zf_model.module.autoencoder.eval()
+                    do_eval(query_array, args,iter, text_features,zf_model,clip_model)
                     
             if not (iter%5000) and iter!=0:
-                save_networks(args,iter,wrapper)
-    save_networks(args,iter,wrapper)
+                save_networks(args,iter,zf_model)
+
+    save_networks(args,iter,zf_model)
 
 def main(args):
     set_seed(args.seed)
@@ -160,13 +156,19 @@ def main(args):
 
     net,latent_flow_network = get_networks(args)
 
-    param_dict={'device':args.device,'cube_len':args.num_voxels}
+    # make directory for saving images with name of the text query using os.makedirs
+    if not os.path.exists(f'{args.query_dir}/{args.id}'):
+        os.makedirs(f'{args.query_dir}/{args.id}')
+
+    # Baseline ea renderer uses ray-trace (instead of nn) to get object silhouette
+    # Doesn't give as good of renderings as NVR+ but can be useful for debugging/testing
     if args.renderer == 'ea':
+        param_dict={'device':args.device,'cube_len':args.num_voxels}
         renderer=BaselineRenderer('absorption_only',param_dict)
     elif args.renderer == 'nvr+':
         renderer = NVR_Renderer(args, args.device)
 
-    test_train(args,clip_model,net,latent_flow_network,renderer)
+    train_zf(args,clip_model,net,latent_flow_network,renderer)
     
 if __name__=="__main__":
     args=get_local_parser()
