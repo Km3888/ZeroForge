@@ -4,7 +4,6 @@ from networks import autoencoder, latent_flows
 from networks.autoencoder import ZeroConvDecoder
 from train_autoencoder import parsing
 import torch
-import sys
 import os
 import random
 from utils import helper

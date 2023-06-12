@@ -21,7 +21,6 @@ import torchvision
 import torchvision.transforms as T
 
 import PIL
-import sys
 import numpy as np
 import torch.nn as nn
 
@@ -154,10 +153,4 @@ def main(args):
     
 if __name__=="__main__":
     args=get_local_parser()
-    print('renderer %s' % args.renderer)
-    import sys; sys.stdout.flush()
-
     main(args)
-    
-    sys.stdout.write(args.writer.log_dir[:5])
-    sys.stdout.flush()
