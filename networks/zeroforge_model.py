@@ -1,4 +1,4 @@
-from utils import visualization
+from zf_utils import make_3d_grid
 import torch
 import torch.nn as nn
 
@@ -33,7 +33,7 @@ class ZeroForge(nn.Module):
         batch_size = text_features.shape[0]
                     
         shape = (voxel_size, voxel_size, voxel_size)
-        p = visualization.make_3d_grid([-0.5] * 3, [+0.5] * 3, shape).type(torch.FloatTensor).to(text_features.device)
+        p = make_3d_grid([-0.5] * 3, [+0.5] * 3, shape).type(torch.FloatTensor).to(text_features.device)
         query_points = p.expand(batch_size, *p.size())
             
         noise = torch.Tensor(batch_size, self.args.emb_dims).normal_().to(self.args.device)

@@ -2,14 +2,13 @@ import clip
 from torch.utils.tensorboard import SummaryWriter
 from networks import autoencoder, latent_flows
 from networks.autoencoder import ZeroConvDecoder
-from train_autoencoder import parsing
 import torch
 import os
 import random
-from utils import helper
 import json
 import numpy as np
 import matplotlib.pyplot as plt
+import argparse
 
 prompts_prefix_pool = ["a photo of a ", "a "]
 
@@ -53,7 +52,7 @@ def get_prompts(obj, num_prompts):
 def make_writer(args):
     if not args.use_tensorboard:
         return None
-    tensorboard_comment = 'q=%s_lr=%s_beta=%s_gpu=%s_baseline=%s_v=%s_k=%s_r=%s_s=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized,args.num_voxels,args.num_views,args.renderer,args.seed)
+    tensorboard_comment = 'q=%s_lr=%s_beta=%s_gpu=%s_baseline=%s_k=%s_r=%s_s=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized,args.num_views,args.renderer,args.seed)
     if args.use_zero_conv:
         tensorboard_comment += '_zero_conv'
     if args.contrast_lambda > 0:
@@ -75,10 +74,10 @@ def get_networks(args):
         net.encoder.decoder = autoencoder.ZeroConvDecoder(net.encoder.decoder)
         net = net.to(args.device)
     if not args.uninitialized:
-        checkpoint_nf_path = os.path.join(args.init_base + "/" + "models/prior/best.pt")
+        checkpoint_nf_path = os.path.join(args.init_base + "/" + "/prior.pt")
         checkpoint = torch.load(checkpoint_nf_path, map_location=args.device)
         latent_flow_network.load_state_dict(checkpoint['model'])
-        checkpoint = torch.load(args.init_base +"/"+ "models/autoencoder/best_iou.pt", map_location=args.device)
+        checkpoint = torch.load(args.init_base + "autoencoder.pt", map_location=args.device)
         net.load_state_dict(checkpoint['model'])
         net.eval()
     return net, latent_flow_network
@@ -93,9 +92,6 @@ def get_local_parser(mode="args"):
     parser.add_argument("--clip_model_type",  type=str, default='B-32', metavar='N', help='what model to use')
     parser.add_argument("--noise",  type=str, default='add', metavar='N', help='add or remove')
     parser.add_argument("--seed_nf",  type=int, default=1, metavar='N', help='add or remove')
-    parser.add_argument("--images_type",  type=str, default=None, help='img_choy13 or img_custom')
-    parser.add_argument("--n_px",  type=int, default=224, help='Resolution of the image')
-    parser.add_argument("--text_query",  type=str, default="")
     parser.add_argument("--beta",  type=float, default=75, help='regularization coefficient')
     parser.add_argument("--learning_rate",  type=float, default=01e-06, help='learning rate') #careful, base parser has "lr" param with different default value
     parser.add_argument("--use_tensorboard",  type=bool, default=True, help='use tensorboard')
@@ -172,7 +168,6 @@ def get_clip_model(args):
     return args, clip_model
 
 def set_seed(seed):
-    helper.set_seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed(seed)
@@ -185,26 +180,6 @@ def save_networks(args,iteration,wrapper):
     torch.save(wrapper.module.autoencoder.state_dict(), '%s/%s/aencoder_%s.pt' % (args.query_dir,args.id,iteration))
 
 
-def get_local_parser(mode="args"):
-    parser = parsing(mode="parser")
-    parser.add_argument("--num_blocks", type=int, default=5, help='Num of blocks for prior')
-    parser.add_argument("--flow_type", type=str, default='realnvp_half', help='flow type: mf, glow, realnvp ')
-    parser.add_argument("--num_hidden", type=int, default=1024, help='Number of parameter for flow model')
-    parser.add_argument("--latent_load_checkpoint", type=str, default=None, help='Checkpoint to load latent flow model')
-    parser.add_argument("--text_query", nargs='+', default=None, metavar='N', help='text query array')
-    parser.add_argument("--num_views",  type=int, default=5, metavar='N', help='Number of views')
-    parser.add_argument("--clip_model_type",  type=str, default='B-32', metavar='N', help='what model to use')
-    parser.add_argument("--noise",  type=str, default='add', metavar='N', help='add or remove')
-    parser.add_argument("--seed_nf",  type=int, default=1, metavar='N', help='add or remove')
-    parser.add_argument("--images_type",  type=str, default=None, help='img_choy13 or img_custom')
-    parser.add_argument("--n_px",  type=int, default=224, help='Resolution of the image')
-    parser.add_argument("--autoencoder_path",type=str,default=None)
-    
-    if mode == "args":
-        args = parser.parse_args()
-        return args
-    else:
-        return parser
 
 def parsing(mode="args"):
     parser = argparse.ArgumentParser()
@@ -218,40 +193,14 @@ def parsing(mode="args"):
     parser.add_argument('--last_feature_transform', type=str, default="add_noise", help='add_noise or none')
     parser.add_argument('--reconstruct_loss_type', type=str, default="sum", help='bce or sum (mse) or mean (mse)')
     parser.add_argument('--pc_dims', type=int, default=1024, help='Dimension of embedding')
-                        
-    ### Dataset details
-    parser.add_argument('--dataset_path', type=str, default=None, help='Dataset path')
-    parser.add_argument('--dataset_name', type=str, default="Shapenet", help='Dataset path')
-    parser.add_argument("--num_points", type=int, default=2025, help='Number of points')
-    parser.add_argument("--num_sdf_points", type=int, default=5000, help='Number of points')
-    parser.add_argument("--test_num_sdf_points", type=int, default=30000, help='Number of points')
-    parser.add_argument('--categories',   nargs='+', default=None, metavar='N')
-    parser.add_argument("--num_workers", type=int, default=4, help='Number of workers')                     
-    
+                            
     ### training details
-    parser.add_argument('--train_mode', type=str, default="train", help='train or test')
     parser.add_argument('--seed', type=int, default=1, help='Seed')
-    parser.add_argument('--epochs', type=int, default=300, help="Total epochs")
-    parser.add_argument('--checkpoint', type=str, default=None, help="Checkpoint to load")
-    parser.add_argument('--use_timestamp',  action='store_true', help='Whether to use timestamp in dump files')
-    parser.add_argument('--num_iterations', type=int, default=300000, help='How long the training shoulf go on')    
     parser.add_argument('--gpu', nargs='+' , default="0", help='GPU list')
     parser.add_argument('--optimizer', type=str, choices=('SGD', 'Adam'), default='Adam')
     parser.add_argument('--lr', type=float, default=None)
-    parser.add_argument('--batch_size', type=int, default=32, help='Dimension of embedding')
-    parser.add_argument('--test_batch_size', type=int, default=32, help='Dimension of embedding')
     parser.add_argument('--threshold', type=float, default=0.05, help='Threshold for voxel stuff')
-    parser.add_argument('--sampling_type', type=str, default=None, help='what sampling type: None--> Uniform')
-    
-    ### Logging details 
-    parser.add_argument('--print_every', type=int, default=50, help='Printing the loss every')
-    parser.add_argument('--save_every', type=int, default=50, help='Saving the model every')
-    parser.add_argument('--validation_every', type=int, default=5000, help='validation set every')
-    parser.add_argument('--visualization_every', type=int, default=10, help='visualization of the results every')
-    parser.add_argument("--log-level", type=str, choices=('info', 'warn', 'error'), default='info')
-    parser.add_argument('--experiment_type', type=str, default="max", help='experiment type')
-    parser.add_argument('--experiment_every', type=int, default=5, help='experiment every ')
-    
+        
     if mode == "args":
         args = parser.parse_args()
         return args
@@ -294,3 +243,36 @@ def voxel_save(voxels, text_name, out_file=None, transpose=True, show=False):
     if show:
         plt.show()
     plt.close(fig)
+
+def get_device(args):
+    gpu_string = "cuda:"
+    gpu_array = []
+    length = 1
+    for i in args.gpu:
+        if length == len(args.gpu):
+            gpu_string = gpu_string + i
+        else:
+            gpu_string = gpu_string + i + ","
+        gpu_array.append(int(i))
+        length = length + 1
+    return gpu_string, gpu_array
+
+def make_3d_grid(bb_min, bb_max, shape):
+    ''' Makes a 3D grid.
+    Args:
+        bb_min (tuple): bounding box minimum
+        bb_max (tuple): bounding box maximum
+        shape (tuple): output shape
+    '''
+    size = shape[0] * shape[1] * shape[2]
+
+    pxs = torch.linspace(bb_min[0], bb_max[0], shape[0])
+    pys = torch.linspace(bb_min[1], bb_max[1], shape[1])
+    pzs = torch.linspace(bb_min[2], bb_max[2], shape[2])
+
+    pxs = pxs.view(-1, 1, 1).expand(*shape).contiguous().view(size)
+    pys = pys.view(1, -1, 1).expand(*shape).contiguous().view(size)
+    pzs = pzs.view(1, 1, -1).expand(*shape).contiguous().view(size)
+    p = torch.stack([pxs, pys, pzs], dim=1)
+
+    return p

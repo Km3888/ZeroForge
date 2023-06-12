@@ -1,6 +1,4 @@
 import os
-import gc
-import time
 
 import torch
 import torch.optim as optim
@@ -8,8 +6,6 @@ import torch.optim as optim
 from networks.zeroforge_model import ZeroForge
 
 import clip
-
-from utils import helper
 
 from rendering.nvr_renderer import NVR_Renderer
 from rendering.baseline_renderer import BaselineRenderer
@@ -20,15 +16,15 @@ import torchvision.transforms as T
 import PIL
 import numpy as np
 import torch.nn as nn
-from cf_utils import voxel_save,get_local_parser
 from zf_utils import make_writer, get_networks,\
-                         get_local_parser, get_clip_model,get_query_array,\
-                         get_text_embeddings,set_seed, save_networks,plt_render
+                    get_local_parser, get_clip_model,get_query_array,\
+                    get_text_embeddings, set_seed, save_networks, plt_render, \
+                    voxel_save,get_local_parser,get_device
 import PIL
 import pdb
 
 # computes loss function for training ZeroForge
-def clip_loss(im_embs,text_features):
+def clip_loss(im_embs,text_features,args):
 
     #start with simple similarity loss
     loss = -1*torch.cosine_similarity(text_features,im_embs).mean()
@@ -97,7 +93,7 @@ def train_zf(args,clip_model,autoencoder,latent_flow_model,renderer):
         with torch.cuda.amp.autocast():
             zf_model.module.autoencoder.train()
             out_3d, im_samples, im_embs = zf_model(text_features)
-            loss,similarity_loss = clip_loss(im_embs, text_features, args, query_array)
+            loss,similarity_loss = clip_loss(im_embs, text_features, args)
         loss.backward()
         zf_optimizer.step()
 
@@ -126,7 +122,7 @@ def main(args):
     args.writer = make_writer(args)
     args.id = args.writer.log_dir.split('runs/')[-1]
     
-    device, _ = helper.get_device(args)
+    device, _ = get_device(args)
     args.device = device
     
     print("Using device: ", device)
