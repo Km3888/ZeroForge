@@ -88,7 +88,7 @@ def get_local_parser(mode="args"):
     parser.add_argument("--flow_type", type=str, default='realnvp_half', help='flow type: mf, glow, realnvp ')
     parser.add_argument("--num_hidden", type=int, default=1024, help='Number of parameter for flow model')
     parser.add_argument("--latent_load_checkpoint", type=str, default=None, help='Checkpoint to load latent flow model')
-    parser.add_argument("--num_views",  type=int, default=5, metavar='N', help='Number of views')
+    parser.add_argument("--num_views",  type=int, default=3, metavar='N', help='Number of views')
     parser.add_argument("--clip_model_type",  type=str, default='B-32', metavar='N', help='what model to use')
     parser.add_argument("--noise",  type=str, default='add', metavar='N', help='add or remove')
     parser.add_argument("--seed_nf",  type=int, default=1, metavar='N', help='add or remove')
