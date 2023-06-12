@@ -9,6 +9,7 @@ import random
 from utils import helper
 import json
 import numpy as np
+import matplotlib.pyplot as plt
 
 prompts_prefix_pool = ["a photo of a ", "a "]
 
@@ -182,3 +183,114 @@ def set_seed(seed):
 def save_networks(args,iteration,wrapper):
     torch.save(wrapper.module.latent_flow_model.state_dict(), '%s/%s/flow_model_%s.pt' % (args.query_dir,args.id,iteration))
     torch.save(wrapper.module.autoencoder.state_dict(), '%s/%s/aencoder_%s.pt' % (args.query_dir,args.id,iteration))
+
+
+def get_local_parser(mode="args"):
+    parser = parsing(mode="parser")
+    parser.add_argument("--num_blocks", type=int, default=5, help='Num of blocks for prior')
+    parser.add_argument("--flow_type", type=str, default='realnvp_half', help='flow type: mf, glow, realnvp ')
+    parser.add_argument("--num_hidden", type=int, default=1024, help='Number of parameter for flow model')
+    parser.add_argument("--latent_load_checkpoint", type=str, default=None, help='Checkpoint to load latent flow model')
+    parser.add_argument("--text_query", nargs='+', default=None, metavar='N', help='text query array')
+    parser.add_argument("--num_views",  type=int, default=5, metavar='N', help='Number of views')
+    parser.add_argument("--clip_model_type",  type=str, default='B-32', metavar='N', help='what model to use')
+    parser.add_argument("--noise",  type=str, default='add', metavar='N', help='add or remove')
+    parser.add_argument("--seed_nf",  type=int, default=1, metavar='N', help='add or remove')
+    parser.add_argument("--images_type",  type=str, default=None, help='img_choy13 or img_custom')
+    parser.add_argument("--n_px",  type=int, default=224, help='Resolution of the image')
+    parser.add_argument("--autoencoder_path",type=str,default=None)
+    
+    if mode == "args":
+        args = parser.parse_args()
+        return args
+    else:
+        return parser
+
+def parsing(mode="args"):
+    parser = argparse.ArgumentParser()
+    
+    ### Sub Network details
+    parser.add_argument("--input_type", type=str, default='Voxel', help='What is the input representation')
+    parser.add_argument("--output_type", type=str, default='Implicit', help='What is the output representation')
+    parser.add_argument("--encoder_type", type=str, default='Voxel_Encoder_BN', help='what is the encoder')
+    parser.add_argument("--decoder_type", type=str, default='Occ_Simple_Decoder', help='what is the decoder')
+    parser.add_argument('--emb_dims', type=int, default=128, help='Dimension of embedding')
+    parser.add_argument('--last_feature_transform', type=str, default="add_noise", help='add_noise or none')
+    parser.add_argument('--reconstruct_loss_type', type=str, default="sum", help='bce or sum (mse) or mean (mse)')
+    parser.add_argument('--pc_dims', type=int, default=1024, help='Dimension of embedding')
+                        
+    ### Dataset details
+    parser.add_argument('--dataset_path', type=str, default=None, help='Dataset path')
+    parser.add_argument('--dataset_name', type=str, default="Shapenet", help='Dataset path')
+    parser.add_argument("--num_points", type=int, default=2025, help='Number of points')
+    parser.add_argument("--num_sdf_points", type=int, default=5000, help='Number of points')
+    parser.add_argument("--test_num_sdf_points", type=int, default=30000, help='Number of points')
+    parser.add_argument('--categories',   nargs='+', default=None, metavar='N')
+    parser.add_argument("--num_workers", type=int, default=4, help='Number of workers')                     
+    
+    ### training details
+    parser.add_argument('--train_mode', type=str, default="train", help='train or test')
+    parser.add_argument('--seed', type=int, default=1, help='Seed')
+    parser.add_argument('--epochs', type=int, default=300, help="Total epochs")
+    parser.add_argument('--checkpoint', type=str, default=None, help="Checkpoint to load")
+    parser.add_argument('--use_timestamp',  action='store_true', help='Whether to use timestamp in dump files')
+    parser.add_argument('--num_iterations', type=int, default=300000, help='How long the training shoulf go on')    
+    parser.add_argument('--gpu', nargs='+' , default="0", help='GPU list')
+    parser.add_argument('--optimizer', type=str, choices=('SGD', 'Adam'), default='Adam')
+    parser.add_argument('--lr', type=float, default=None)
+    parser.add_argument('--batch_size', type=int, default=32, help='Dimension of embedding')
+    parser.add_argument('--test_batch_size', type=int, default=32, help='Dimension of embedding')
+    parser.add_argument('--threshold', type=float, default=0.05, help='Threshold for voxel stuff')
+    parser.add_argument('--sampling_type', type=str, default=None, help='what sampling type: None--> Uniform')
+    
+    ### Logging details 
+    parser.add_argument('--print_every', type=int, default=50, help='Printing the loss every')
+    parser.add_argument('--save_every', type=int, default=50, help='Saving the model every')
+    parser.add_argument('--validation_every', type=int, default=5000, help='validation set every')
+    parser.add_argument('--visualization_every', type=int, default=10, help='visualization of the results every')
+    parser.add_argument("--log-level", type=str, choices=('info', 'warn', 'error'), default='info')
+    parser.add_argument('--experiment_type', type=str, default="max", help='experiment type')
+    parser.add_argument('--experiment_every', type=int, default=5, help='experiment every ')
+    
+    if mode == "args":
+        args = parser.parse_args()
+        return args
+    else:
+        return parser
+
+
+def voxel_save(voxels, text_name, out_file=None, transpose=True, show=False):
+
+    # Use numpy
+    voxels = np.asarray(voxels)
+    # Create plot
+    #fig = plt.figure()
+    fig = plt.figure(figsize=(40,20))
+    
+    ax = fig.add_subplot(111, projection=Axes3D.name)
+    if transpose == True:
+        voxels = voxels.transpose(2, 0, 1)
+    #else:
+        #voxels = voxels.transpose(2, 0, 1)
+    
+
+    ax.voxels(voxels, edgecolor='k', facecolors='coral', linewidth=0.5)
+    ax.set_xlabel('Z')
+    ax.set_ylabel('X')
+    ax.set_zlabel('Y')
+    # Hide grid lines
+    plt.grid(False)
+    plt.axis('off')
+    
+    if text_name != None:
+        plt.title(text_name, {'fontsize':30}, y=0.15)
+    #plt.text(15, -0.01, "Correlation Graph between Citation & Favorite Count")
+
+    ax.view_init(elev=30, azim=45)
+
+    if out_file is not None:
+        plt.axis('off')
+        plt.savefig(out_file)
+    if show:
+        plt.show()
+    plt.close(fig)

@@ -8,9 +8,6 @@ import torch.optim as optim
 from networks.zeroforge_model import ZeroForge
 
 import clip
-from test_post_clip import voxel_save
-
-from train_post_clip import get_local_parser, get_clip_model
 
 from utils import helper
 
@@ -23,8 +20,8 @@ import torchvision.transforms as T
 import PIL
 import numpy as np
 import torch.nn as nn
-
-from continued_utils import make_writer, get_networks,\
+from cf_utils import voxel_save,get_local_parser
+from zf_utils import make_writer, get_networks,\
                          get_local_parser, get_clip_model,get_query_array,\
                          get_text_embeddings,set_seed, save_networks,plt_render
 import PIL
