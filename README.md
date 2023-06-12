@@ -42,9 +42,8 @@ This downloads a folder of their experimental results, the only part of which we
 
 ## Neural Voxel Renderer
 
-We use the Neural Voxel Renderer+ model described [here](https://arxiv.org/abs/1912.04591). For compatibility with our other components, we wrote a PyTorch implementation using the exact same architecture and weights found in the official [tensorflow implementation](https://github.com/tensorflow/graphics/tree/master/tensorflow_graphics/projects/neural_voxel_renderer). To get the weights for the NVR+ model download them to a directory` NVR_WEIGHTS` with.
+We use the Neural Voxel Renderer+ model described [here](https://arxiv.org/abs/1912.04591). For compatibility with our other components, we wrote a PyTorch implementation using the exact same architecture and weights found in the official [tensorflow implementation](https://github.com/tensorflow/graphics/tree/master/tensorflow_graphics/projects/neural_voxel_renderer). To get the weights for the NVR+ model download them to a location `NVR_WEIGHTS` from our [hugging space](https://huggingface.co/ke-lly/ZeroForge).
 
-[insert installation instructions] 
 
 ## Running ZeroForge
 The main file for training is `zf_training.py` which performs training on an array of text queries. Results are logged using tensorboard in the specified log directory.
