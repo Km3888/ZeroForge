@@ -27,7 +27,7 @@ import torch.nn as nn
 
 from continued_utils import make_writer, get_networks,\
                          get_local_parser, get_clip_model,get_query_array,\
-                         get_text_embeddings,set_seed, save_networks
+                         get_text_embeddings,set_seed, save_networks,plt_render
 import PIL
 import pdb
 
@@ -49,24 +49,6 @@ def do_eval(query_array,args,iteration,text_features,zf_model,clip_model):
         args.writer.add_image('voxel image', grid, iteration)
         args.writer.add_scalar('render_sim_loss', render_sim_loss, iteration)
     
-def plt_render(out_3d_hard,iteration):
-    # code for saving the binary voxel image renders
-    # voxel_save is a function that takes in a voxel tensor and saves its rendering as a png
-    # we save the renderings and then load them back in as tensors to display in tensorboard
-    voxel_ims=[]
-    num_shapes = out_3d_hard.shape[0]
-    for shape in range(min(num_shapes,3)):
-        save_path = '/scratch/km3888/queries/%s/sample_%s_%s.png' % (args.id,iteration,shape)
-        voxel_save(out_3d_hard[shape].squeeze().detach().cpu(), None, out_file=save_path)
-        # load the image that was saved and transform it to a tensor
-        voxel_im = PIL.Image.open(save_path).convert('RGB')
-        voxel_tensor = T.ToTensor()(voxel_im)
-        voxel_ims.append(voxel_tensor.unsqueeze(0))
-    
-    voxel_ims = torch.cat(voxel_ims,0)
-
-    return voxel_ims
-
 def clip_loss(im_embs,text_features,args,query_array):
     # computes loss function for training ZeroForge
 
