@@ -1,23 +1,22 @@
 
 
-## CLIP-Forge: Towards Zero-Shot Text-to-Shape Generation (CVPR 2022)  
+## Zero-Forge: Feedforward Text-to-Shape Without 3D Supervision
+by **Kelly Marshall**, **Minh Pham**, **Ameya Joshi**, **Anushrut Jignasu**, **Adarsh Krishnamurthy** and **Chinmay Hegde**
 
 ![CLIP](/images/main.png)
 
-Generating shapes using natural language can enable new ways of imagining and creating the things around us. While significant recent progress has been made in text-to-image generation, text-to-shape generation remains a challenging problem due to the unavailability of paired text and shape data at a large scale. We present a simple yet effective method for zero-shot text-to-shape generation that circumvents such data scarcity. Our proposed method, named CLIP-Forge, is based on a two-stage training process, which only depends on an unlabelled shape dataset and a pre-trained image-text network such as CLIP. Our method has the benefits of avoiding expensive inference time optimization, as well as the ability to generate multiple shapes for a given text. We not only demonstrate promising zero-shot generalization of the CLIP-Forge model qualitatively and quantitatively, but also provide extensive comparative evaluations to better understand its behavior.
+Current state-of-the-art methods for text-to-shape generation either require supervised training using a labeled dataset of pre-defined 3D shapes, or perform expensive inference-time optimization of implicit neural representations. In this work, we present ZeroForge, an approach for zero-shot text-to-shape generation that avoids both pitfalls. To achieve open-vocabulary shape generation, we require careful architectural adaptation of existing feed-forward approaches, as well as a combination of data-free CLIP-loss and contrastive losses to avoid mode collapse. Using these techniques, we are able to considerably expand the generative ability of existing feed-forward text-to-shape models such as CLIP-Forge. We support our method via extensive qualitative and quantitative evaluations.
 
-Paper Link: [[Paper]](https://arxiv.org/pdf/2110.02624.pdf)
+Paper Link: [[Paper]](Arxiv link soon)
 
 If you find our code or paper useful, you can cite at:
 
-    @article{sanghi2021clip,
-      title={Clip-forge: Towards zero-shot text-to-shape generation},
-      author={Sanghi, Aditya and Chu, Hang and Lambourne, Joseph G and Wang, Ye and Cheng, Chin-Yi and Fumero, Marco},
-      journal={arXiv preprint arXiv:2110.02624},
-      year={2021}
-    }
+[Insert citation here]
 
 ## Installation
+
+Our code is an extension of the [CLIP-Forge repo](https://github.com/AutodeskAILab/Clip-Forge) as our method uses their trained model as an initialization. After cloning the repo, you can set up your environment as follows:
+
 
 First create an anaconda environment called `clip_forge` using
 ```
@@ -33,73 +32,26 @@ pip install git+https://github.com/openai/CLIP.git
 pip install sklearn
 ```
 
-Choose a folder to download the data, classifier and model: 
+You can download the CLIP-Forge initialization weights published by Sanghi et al. by running:
+
 ```
 wget https://clip-forge-pretrained.s3.us-west-2.amazonaws.com/exps.zip
 unzip exps.zip
 ```
+This downloads a folder of their experimental results, the only part of which we're interested in is the models subfolder. Alternatively, you can train your own CLIP-Forge weights using their [instructions](https://github.com/AutodeskAILab/Clip-Forge). 
 
-## Training
+## Neural Voxel Renderer
 
-For training, first you need to setup the dataset. We use the data prepared from occupancy networks (https://github.com/autonomousvision/occupancy_networks).
-```
-## Stage 1
-python train_autoencoder.py --dataset_path /path/to/dataset/
- 
-## Stage 2
-python train_post_clip.py  --dataset_path /path/to/dataset/ --checkpoint best_iou  --num_views 1 --text_query "a chair" "a limo" "a jet plane"
-```
+We use the Neural Voxel Renderer+ model described [here](https://arxiv.org/abs/1912.04591). For compatibility with our other components, we wrote a PyTorch implementation using the exact same architecture and weights found in the official [tensorflow implementation](https://github.com/tensorflow/graphics/tree/master/tensorflow_graphics/projects/neural_voxel_renderer). To get the weights for the NVR+ model download them to a location `NVR_WEIGHTS` from our [hugging space](https://huggingface.co/ke-lly/ZeroForge).
 
-For Pointcloud code, please use the following code: 
+
+## Running ZeroForge
+The main file for training is `zf_training.py` which performs training on an array of text queries. Results are logged using tensorboard in the specified log directory.
 
 ```
-## Stage 1
-python train_autoencoder.py --dataset_path /path/to/dataset/ --input_type Pointcloud --output_type Pointcloud 
- 
-## Stage 2
-python train_post_clip.py  --dataset_path /path/to/dataset/ --input_type Pointcloud --output_type Pointcloud  --checkpoint best  --num_views 1 --text_query "a chair" "a limo" "a jet plane"
+python zf_training.py --query_array [QUERY] --log_dir [LOGDIR] --nvr_renderer_checkpoint [NVR_WEIGHTS]
 ```
-
-
-## Inference
-
-To generate shape renderings based on text query:
-```
- python test_post_clip.py --checkpoint_dir_base "./exps/models/autoencoder" --checkpoint best_iou --checkpoint_nf best --experiment_mode save_voxel_on_query --checkpoint_dir_prior "./exps/models/prior" --text_query "a truck" "a round chair" "a limo" --threshold 0.1 --output_dir "./exps/hello_world"
-```
-
-The image rendering of the shapes will be present in output_dir. 
-
-To calculate Accuracy, please make sure you have the classifier model. 
-```
-python test_post_clip.py --checkpoint_dir_base "./exps/models/autoencoder/" --checkpoint best_iou --checkpoint_nf best --experiment_mode cls_cal_category --checkpoint_dir_prior "./exps/models/prior/" --threshold 0.05 --classifier_checkpoint "./exps/classifier/checkpoints/best.pt"
-```
-To calculate FID, please make sure you have the classifier model and data loaded.
-```
-python test_post_clip.py --checkpoint_dir_base "./exps/models/autoencoder/" --checkpoint best_iou --checkpoint_nf best --experiment_mode fid_cal --dataset_path /path/to/dataset/ --checkpoint_dir_prior "./exps/models/prior/" --threshold 0.05 --classifier_checkpoint "./exps/classifier/checkpoints/best.pt"
-```
-
-## Inference Tips 
-
-To get the optimal results use different threshold values as controlled by the argument `threshold` as shown in Figure 10 in the paper. We also recommend using world synonyms and text augmentation for best results. As the network is trained on Shapenet, we would recommend limiting the queries across the 13 categories present in ShapeNet. Note, we believe this method scales with data, but unfortunately public 3D data is limited. 
-
-
-
-## Releasing Soon 
-
-- [ ] Pointcloud code --> semi done (need to test code)
-- [ ] Pretrained models for pointcloud experiments 
-
-
-
-## Other interesting ideas 
-
-- ClipMatrix (https://arxiv.org/pdf/2109.12922.pdf)
-- Text2Mesh (https://threedle.github.io/text2mesh/)
-- DreamFields (https://arxiv.org/pdf/2112.01455.pdf)
-- https://arxiv.org/pdf/2203.13333.pdf
-
-
+The `query_array` argument specifies by name a uniform distribution over a set of text queries. For instance, the query array "three" learns a simple distribution over cutlery prompts. The query arrays we used for training ZeroForge are stored in `query_arrays.json` by name, but any set of text queries can be specified by adding it to the .json file.
 
 
 
