@@ -1,7 +1,7 @@
 
 
 ## Zero-Forge: Feedforward Text-to-Shape Without 3D Supervision
-by **Kelly Marshall**, **Minh Pham**, **Ameya Joshi**, **Anushrut Jignasu**, **Adarsh Krishnamurthy** and **Chinmay Hegde**
+by **Kelly Marshall**, **Minh Pham**, **Ameya Joshi**, **Anushrut Jignasu**, **Aditya Balu**, **Adarsh Krishnamurthy** and **Chinmay Hegde**
 
 ![CLIP](/images/main.png)
 
