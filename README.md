@@ -17,7 +17,7 @@ If you find our code or paper useful, you can cite at:
 
 Our code is an extension of the [CLIP-Forge repo](https://github.com/AutodeskAILab/Clip-Forge) as our method uses their trained model as an initialization. After cloning the repo, you can set up your environment as follows:
 
-
+https://github.com/Km3888/ZeroForge
 First create an anaconda environment called `clip_forge` using
 ```
 conda env create -f environment.yaml
@@ -38,7 +38,7 @@ You can download the CLIP-Forge initialization weights published by Sanghi et al
 wget https://clip-forge-pretrained.s3.us-west-2.amazonaws.com/exps.zip
 unzip exps.zip
 ```
-This downloads a folder of their experimental results, the only part of which we're interested in is the models subfolder. Alternatively, you can train your own CLIP-Forge weights using their [instructions](https://github.com/AutodeskAILab/Clip-Forge). 
+This downloads a folder of their experimental results, the only part of which we're interested in is the models subfolder. Alternatively, you can get thse initialization weights by trainig CLIP-Forge according to their [instructions](https://github.com/AutodeskAILab/Clip-Forge). 
 
 ## Neural Voxel Renderer
 
