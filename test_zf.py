@@ -9,7 +9,7 @@ from simple_3dviz.utils import save_frame
 from simple_3dviz import Lines
 import argparse
 
-from continued_utils import query_arrays,make_init_dict
+from zf_utils import query_arrays,make_init_dict, get_networks, voxel_save
 import clip
 from networks import autoencoder, latent_flows
 import torch
@@ -19,7 +19,7 @@ import tqdm
 import os
 from test_post_clip import id_to_sub_category
 
-def save_voxels(voxels,out_path,query_array,thresh):
+def save_voxels(voxels,out_path):
     # Load your voxel data as a NumPy array
     voxels = voxels.astype(np.bool8)  # Replace with the path to your voxel data
     # create directory for out_path if it doesn't exist
@@ -28,17 +28,7 @@ def save_voxels(voxels,out_path,query_array,thresh):
     # Create a scene with a mesh and a line
     print('image out path:',out_path)
     for i in range(voxels.shape[0]):
-        voxel = voxels[i]
-        # l = Lines.from_voxel_grid(voxel, colors=(0, 0, 0.), width=0.01)
-        m = Mesh.from_voxel_grid(voxel, colors=(0.8, 0, 0))
-        # camera_position = [192, 192, 192]
-        scene = Scene(size=[2048,2048])
-        scene.add(m)
-        # scene.add(l)
-        #CameraTrajectory(Circle([0, 0.15, 0], [0, 0.15, -1.5], [0, 1, 0]), speed=0.01),
-        # render(m,size=(800, 600),n_frames=1,behaviours=[SaveFrames("out.png")])
-        scene.render()
-        save_frame(out_path+"/%s_%s.png"% (query_array[i],thresh), scene.frame)
+        voxel_save(voxels[i], None, out_file=out_path+"/%i.png")
 
 def get_networks(checkpoint_dir,init,zero_conv,args,iter=15000):
     init_dict = make_init_dict()[init]
@@ -115,29 +105,18 @@ def gen_voxels(query_array, net, latent_flow_model,clip_model, output_dir):
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
     
-    parser.add_argument("--checkpoint_dir", type=str, default="/scratch/km3888/clip_forge_weights/33031346/q=easy_5_with_original_lr=1e-05_beta=200_gpu=0_baseline=False_v=128_k=2_r=nvr+_s=1_init=og_init_c=0.01_improved_temp=50/")
-    parser.add_argument("--output_dir",type=str,default="voxels/visuals/33031346/q=easy_5_with_original_lr=1e-05_beta=200_gpu=0_baseline=False_v=128_k=2_r=nvr+_s=1_init=og_init_c=0.01_improved_temp=50")
-    parser.add_argument("--init", type=str, default="og_init")
-    parser.add_argument("--threshold", type=float, default=0.1)
+    parser.add_argument("--checkpoint_dir", type=str)
+    parser.add_argument("--output_dir",type=str)
+    parser.add_argument("--threshold", type=float, default=0.05)
     
     args = parser.parse_args()
     # get query array name from checkpoint_dir name
-    # for example, q=easy_5_with_original_lr=1e-05_beta=200 gives query array name easy_5_with_original
-    # 
+    # for example, q=object_5_with_original_lr=1e-05_beta=200 gives query array name object_5_with_original
+
     query_array_name = args.checkpoint_dir.split("=")[1][:-3]
-    if query_array_name == "easy_5_with_original":
-        query_array_name = "easy_five_with_original"
-    if query_array_name=="superset" or query_array_name=="subset":
-        query_array = list(id_to_sub_category.keys())
-    else:
-        query_array = query_arrays[query_array_name]
-    # query_array = ["round table","square table","jagged knife","thick knife","thin knife","thick spoon","thin spoon","round chair"]
+    query_array = query_arrays[query_array_name]
     zero_conv = "zero_conv" in args.checkpoint_dir
     # query_array = ["a mushroom"]
-    for init_name in ["og_init","init_1","init_2","init_3"]:
-        if init_name in args.checkpoint_dir:
-            args.init = init_name
-            break
     iter=5000
     net, flow, clip_model = get_networks(args.checkpoint_dir, args.init, zero_conv,args,iter=iter)
     for thresh in [0.05]:
