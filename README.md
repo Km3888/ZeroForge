@@ -8,6 +8,7 @@ by **Kelly Marshall**, **Minh Pham**, **Ameya Joshi**, **Anushrut Jignasu**, **A
 Current state-of-the-art methods for text-to-shape generation either require supervised training using a labeled dataset of pre-defined 3D shapes, or perform expensive inference-time optimization of implicit neural representations. In this work, we present ZeroForge, an approach for zero-shot text-to-shape generation that avoids both pitfalls. To achieve open-vocabulary shape generation, we require careful architectural adaptation of existing feed-forward approaches, as well as a combination of data-free CLIP-loss and contrastive losses to avoid mode collapse. Using these techniques, we are able to considerably expand the generative ability of existing feed-forward text-to-shape models such as CLIP-Forge. We support our method via extensive qualitative and quantitative evaluations.
 
 Paper Link: [Paper](https://arxiv.org/abs/2306.08183)
+
 Project Website: [Website](https://nyu-dice-lab.github.io/ZeroForge/)
 
 If you find our code or paper useful, you can cite at:
