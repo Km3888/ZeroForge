@@ -11,6 +11,7 @@ Paper Link: [Paper](https://arxiv.org/abs/2306.08183)
 
 If you find our code or paper useful, you can cite at:
 
+'''
 @misc{marshall2023zeroforge, <br> 
 title={ZeroForge: Feedforward Text-to-Shape Without 3D Supervision}, <br> 
 author={Kelly O. Marshall and Minh Pham and Ameya Joshi and Anushrut Jignasu <br> 
@@ -20,6 +21,7 @@ eprint={2306.08183}, <br>
 archivePrefix={arXiv}, <br> 
 primaryClass={cs.CV} <br> 
 }
+'''
 
 ## Installation
 
