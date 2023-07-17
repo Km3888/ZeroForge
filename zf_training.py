@@ -38,7 +38,7 @@ def clip_loss(im_embs,text_features,args):
     #If the batch contains multiple instances of the same text query 
     #we want to mask out the similarity between identical instances
     k = args.unique #number of unique text queries
-    if k<len(query_array):
+    if k<im_embs.shape[0]:
         n = cos_sim.shape[0]
         mask = torch.zeros_like(cos_sim)
 
@@ -69,7 +69,7 @@ def do_eval(query_array,args,iteration,text_features,zf_model,clip_model):
     if args.use_tensorboard:
         # matplotlib can gives better-quality 3D rendering but is not differentiable and requires binary voxels
         # we compute these renderings to give a better sense of the model's performance
-        plt_ims = plt_render(out_3d_hard,iter)
+        plt_ims = plt_render(out_3d_hard,iter,args)
         grid = torchvision.utils.make_grid(plt_ims, nrow=num_shapes)
         plt_ims = T.Resize((224,224))(plt_ims)
         plt_embs = clip_model.encode_image(plt_ims.to(args.device))

@@ -13,7 +13,7 @@ import argparse
 prompts_prefix_pool = ["a photo of a ", "a "]
 
 
-def plt_render(out_3d_hard,iteration):
+def plt_render(out_3d_hard,iteration,args):
     # code for saving the binary voxel image renders
     # voxel_save is a function that takes in a voxel tensor and saves its rendering as a png
     # we save the renderings and then load them back in as tensors to display in tensorboard
