@@ -48,7 +48,7 @@ You can download the CLIP-Forge initialization weights published by Sanghi et al
 wget https://clip-forge-pretrained.s3.us-west-2.amazonaws.com/exps.zip
 unzip exps.zip
 ```
-This downloads a folder of their experimental results, the only part of which we're interested in is the models subfolder. Alternatively, you can get thse initialization weights by trainig CLIP-Forge according to their [instructions](https://github.com/AutodeskAILab/Clip-Forge). 
+This downloads a folder of their experimental results, the only part of which we're interested in is the models subfolder. Alternatively, you can get these initialization weights by trainig CLIP-Forge according to their [instructions](https://github.com/AutodeskAILab/Clip-Forge). 
 
 ## Neural Voxel Renderer
 
