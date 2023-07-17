@@ -20,7 +20,7 @@ def plt_render(out_3d_hard,iteration):
     voxel_ims=[]
     num_shapes = out_3d_hard.shape[0]
     for shape in range(min(num_shapes,3)):
-        save_path = '%s/%s/sample_%s_%s.png' % (%args.log_dir,args.id,iteration,shape)
+        save_path = '%s/%s/sample_%s_%s.png' % (args.log_dir,args.id,iteration,shape)
         voxel_save(out_3d_hard[shape].squeeze().detach().cpu(), None, out_file=save_path)
         # load the image that was saved and transform it to a tensor
         voxel_im = PIL.Image.open(save_path).convert('RGB')
@@ -111,7 +111,7 @@ def get_local_parser(mode="args"):
     parser.add_argument("--use_tensorboard",  type=bool, default=True, help='use tensorboard')
     parser.add_argument("--query_array",  type=str, default=None, help='multiple queries') 
     parser.add_argument("--uninitialized",  type=bool, default=False, help='Use untrained networks')
-    parser.add_argument("--num_voxels",  type=int, default=32, help='number of voxels')
+    parser.add_argument("--num_voxels",  type=int, default=128, help='number of voxels')
     parser.add_argument("--renderer",  type=str, default='nvr+')
     parser.add_argument("--init_base",  type=str, default="exps/models/", help='where is the initialization')
     parser.add_argument("--setting", type=int, default=None) #### Used for jobs run with SLURM
