@@ -72,10 +72,10 @@ def get_networks(args):
         net.encoder.decoder = autoencoder.ZeroConvDecoder(net.encoder.decoder)
         net = net.to(args.device)
     if not args.uninitialized:
-        checkpoint_nf_path = os.path.join(args.init_base + "/" + "/autoencoder/best_iou.pt")
+        checkpoint_nf_path = os.path.join(args.init_base, "prior/best.pt")
         checkpoint = torch.load(checkpoint_nf_path, map_location=args.device)
         latent_flow_network.load_state_dict(checkpoint['model'])
-        checkpoint = torch.load(args.init_base +"/models/autoencoder/best.pt", map_location=args.device)
+        checkpoint = torch.load(os.path.join(args.init_base,"autoencoder/best_iou.pt"), map_location=args.device)
         net.load_state_dict(checkpoint['model'])
         net.eval()
     return net, latent_flow_network
