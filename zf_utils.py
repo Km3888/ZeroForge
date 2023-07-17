@@ -10,6 +10,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import argparse
 from mpl_toolkits.mplot3d import Axes3D
+import PIL
+import torchvision.transforms as T
 
 prompts_prefix_pool = ["a photo of a ", "a "]
 
