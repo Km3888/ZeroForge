@@ -61,7 +61,6 @@ def clip_loss(im_embs,text_features,args):
     return train_loss,loss
 
 def do_eval(query_array,args,iteration,text_features,zf_model,clip_model):
-    query_array, args,iter, text_features,zf_model,clip_model
     #Collects training metrics and saves images for tensorboard
     with torch.no_grad():
       out_3d_hard, rgbs_hard, _ = zf_model(text_features,hard=True)
