@@ -79,3 +79,4 @@ outputs/*
 survey_images/*
 visuals/*
 augmented_outputs/*
+commands.sh

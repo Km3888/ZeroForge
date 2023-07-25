@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 
 class ZeroForge(nn.Module):
-    def __init__(self, args, clip_model, autoencoder, latent_flow_model, renderer, resizer, query_array):
+    def __init__(self, args, clip_model, autoencoder, latent_flow_model, color_net, renderer, resizer, query_array):
         super(ZeroForge, self).__init__()
         self.clip_model = clip_model
 
@@ -14,6 +14,7 @@ class ZeroForge(nn.Module):
 
         self.autoencoder = autoencoder
         self.latent_flow_model = latent_flow_model
+        self.color_net = color_net
 
         self.renderer = renderer
 
@@ -43,14 +44,16 @@ class ZeroForge(nn.Module):
             out_3d_bin = (out_3d.detach() > self.args.threshold).float()
         else:
             out_3d_bin = torch.sigmoid(self.args.beta*(out_3d-self.args.threshold))#.clone()
+        out_3d_bin_color = self.color_net(out_3d_bin)
 
-        ims = self.renderer(out_3d_bin).double()
+        ims = self.renderer(out_3d_bin_color).double()
         ims = self.resizer(ims)
         im_samples = ims.view(-1,3,224,224)
         
         im_embs = self.clip_model.encode_image(ims)
+        
         if self.args.renderer=='ea':
             #baseline renderer gives 3 dimensions
             text_features=text_features.unsqueeze(1).expand(-1,3,-1).reshape(-1,512)
         
-        return out_3d_bin, im_samples, im_embs
+        return out_3d_bin_color, im_samples, im_embs

@@ -121,10 +121,15 @@ def diff_estimate_ground_image(object_voxels,angle):
     return interpolated_voxels
     
 def diff_load_voxel(voxel):
+    if len(voxel.shape) == 5:
+        edited_voxel = torch.transpose(voxel,3,2)
+        edited_voxel = edited_voxel.view(-1,4,128,128,128)
+        expanded = edited_voxel.permute(0,2,3,4,1)
+        return expanded
+        
     edited_voxel = torch.transpose(voxel,2,1)
     # edited_voxel = torch.flip(edited_voxel,[0])
     edited_voxel = edited_voxel.view(-1,128,128,128,1)
-    
     
     expanded = edited_voxel.repeat(1,1,1,1,4)/3
     expanded[:,:,:,:,-1]=3*expanded[:,:,:,:,0]

@@ -4,6 +4,7 @@ import torch
 import torch.optim as optim
 
 from networks.zeroforge_model import ZeroForge
+from networks.color_net import NoColor, Identity
 
 import clip
 
@@ -82,8 +83,10 @@ def train_zf(args,clip_model,autoencoder,latent_flow_model,renderer):
 
     query_array = get_query_array(args)
     text_features = get_text_embeddings(args,clip_model,query_array).detach()
-
-    zf_model = ZeroForge(args, clip_model, autoencoder, latent_flow_model, renderer, resizer, query_array)
+    
+    color_net = Identity()
+    
+    zf_model = ZeroForge(args, clip_model, autoencoder, latent_flow_model, color_net, renderer, resizer, query_array)
     zf_model = nn.DataParallel(zf_model).to(args.device)
     zf_optimizer = optim.Adam(zf_model.parameters(), lr=args.learning_rate)    
     for iter in range(20000):
@@ -93,6 +96,7 @@ def train_zf(args,clip_model,autoencoder,latent_flow_model,renderer):
             zf_model.module.autoencoder.train()
             out_3d, im_samples, im_embs = zf_model(text_features)
             loss,similarity_loss = clip_loss(im_embs, text_features, args)
+            print('similarity loss:',similarity_loss)
         loss.backward()
         zf_optimizer.step()
 

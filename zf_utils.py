@@ -52,7 +52,7 @@ def get_prompts(obj, num_prompts):
         prompts.append(random.choice(prompts_prefix_pool) + obj)
     return prompts    
 
-def make_writer(args):
+def make_writer(args,color=False):
     if not args.use_tensorboard:
         return None
     tensorboard_comment = 'q=%s_lr=%s_beta=%s_gpu=%s_baseline=%s_k=%s_r=%s_s=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized,args.num_views,args.renderer,args.seed)
@@ -64,6 +64,8 @@ def make_writer(args):
         tensorboard_comment += '_temp=%s' % args.temp
     if args.slurm_id is not None:
         tensorboard_comment = str(args.slurm_id) + "/" + tensorboard_comment
+    if color:
+        tensorboard_comment += '_color'
     log_dir = args.log_dir + tensorboard_comment
     assert args.renderer in ['ea','nvr+']
     return SummaryWriter(log_dir=log_dir)
@@ -110,7 +112,7 @@ def get_local_parser(mode="args"):
     parser.add_argument("--noise",  type=str, default='add', metavar='N', help='add or remove')
     parser.add_argument("--seed_nf",  type=int, default=1, metavar='N', help='add or remove')
     parser.add_argument("--beta",  type=float, default=150, help='regularization coefficient')
-    parser.add_argument("--learning_rate",  type=float, default=01e-05, help='learning rate') #careful, base parser has "lr" param with different default value
+    parser.add_argument("--learning_rate",  type=float, default=01e-05, help='learning rate')
     parser.add_argument("--use_tensorboard",  type=bool, default=True, help='use tensorboard')
     parser.add_argument("--query_array",  type=str, default=None, help='multiple queries') 
     parser.add_argument("--uninitialized",  type=bool, default=False, help='Use untrained networks')
@@ -122,7 +124,7 @@ def get_local_parser(mode="args"):
     parser.add_argument("--log_dir", type=str, default="logs/")
     
     #checkpoint for nvr_renderer
-    parser.add_argument("--nvr_renderer_checkpoint", type=str)
+    parser.add_argument("--nvr_renderer_checkpoint", type=str, required=False)
     parser.add_argument("--contrast_lambda",type=float,default=0.1)
     parser.add_argument("--improved_contrast",action="store_true",help="improved contrast")
     parser.add_argument("--temp",type=float,default=50)
