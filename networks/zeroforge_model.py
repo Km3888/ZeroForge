@@ -46,8 +46,8 @@ class ZeroForge(nn.Module):
             out_3d_bin = torch.sigmoid(self.args.beta*(out_3d-self.args.threshold))#.clone()
         out_3d_bin_color = self.color_net(out_3d_bin)
 
-        ims = self.renderer(out_3d_bin_color).double()
-        ims = self.resizer(ims)
+        ims,angles = self.renderer(out_3d_bin_color,angles)
+        ims = self.resizer(ims.double())
         im_samples = ims.view(-1,3,224,224)
         
         im_embs = self.clip_model.encode_image(ims)
@@ -56,4 +56,4 @@ class ZeroForge(nn.Module):
             #baseline renderer gives 3 dimensions
             text_features=text_features.unsqueeze(1).expand(-1,3,-1).reshape(-1,512)
         
-        return out_3d_bin_color, im_samples, im_embs
+        return out_3d_bin_color, im_samples, im_embs, angles

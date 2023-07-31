@@ -55,7 +55,9 @@ def get_prompts(obj, num_prompts):
 def make_writer(args,color=False):
     if not args.use_tensorboard:
         return None
-    tensorboard_comment = 'q=%s_lr=%s_beta=%s_gpu=%s_baseline=%s_k=%s_r=%s_s=%s'% (args.query_array,args.learning_rate,args.beta,args.gpu[0],args.uninitialized,args.num_views,args.renderer,args.seed)
+    tensorboard_comment = 'q=%s_lr=%s_k=%s_s=%s_2'% (args.query_array,args.learning_rate,args.num_views,args.seed)
+    if args.uninitialized:
+        tensorboard_comment += '_baseline'
     if args.use_zero_conv:
         tensorboard_comment += '_zero_conv'
     if args.contrast_lambda > 0:
@@ -64,8 +66,6 @@ def make_writer(args,color=False):
         tensorboard_comment += '_temp=%s' % args.temp
     if args.slurm_id is not None:
         tensorboard_comment = str(args.slurm_id) + "/" + tensorboard_comment
-    if color:
-        tensorboard_comment += '_color'
     log_dir = args.log_dir + tensorboard_comment
     assert args.renderer in ['ea','nvr+']
     return SummaryWriter(log_dir=log_dir)

@@ -1,10 +1,11 @@
 import os
+import random
 
 import torch
 import torch.optim as optim
 
 from networks.zeroforge_model import ZeroForge
-from networks.color_net import ConstantColor
+from networks.color_net import ConstantColor,ColorNetv1,VoxelNet
 
 import clip
 
@@ -37,21 +38,26 @@ def color_training(args,clip_model,net,latent_flow_model,renderer,color_net):
     zf_model = ZeroForge(args, clip_model, net, latent_flow_model,color_net, renderer, resizer, query_array)
     zf_model = nn.DataParallel(zf_model).to(args.device)
     
-    zf_optimizer = optim.Adam(zf_model.color_net.parameters(), lr=args.learning_rate)    
-    zf_model.autoencoder.train()
+    zf_optimizer = optim.Adam(zf_model.module.color_net.parameters(), lr=01e-5)    
+    zf_model.module.autoencoder.train()
+    # 9 different colors
+    # colors = ['red','orange','yellow','green','blue','purple','pink','brown','black']
+    # color = random.choice(colors)
+    # color = 'red'
+    # color_array = ['%s %s' % (color,query_array[i]) for i in range(len(query_array))]
+    query_array = ['red airplane','green airplane','red airplane','green airplane','red airplane','green airplane']
+    text_features = get_text_embeddings(args,clip_model,query_array).detach()
     for i in range(1000):
         with torch.cuda.amp.autocast():
             zf_optimizer.zero_grad()
-            out_3d, im_samples, im_embs,out_3d_gray = zf_model(text_features)
-            out_3d.retain_grad()
-            out_3d_gray.retain_grad()
+            out_3d, im_samples, im_embs = zf_model(text_features)
             loss,similarity_loss = clip_loss(im_embs, text_features, args)
             os.makedirs(f'{args.log_dir}/{args.id}',exist_ok=True)
-
             # save im_samples
             im_samples_pil = im_samples.detach().cpu().squeeze()
-            similarity_loss.backward()
-            save_image(im_samples_pil, os.path.join(os.getcwd(),'im_samples_%s.png' % i))
+            loss.backward()
+            if not i%50:
+                save_image(im_samples_pil, os.path.join(os.getcwd(),'im_samples_%s_color=%s.png' % (i,color)))
             zf_optimizer.step()
 
 def main(args):
@@ -59,7 +65,7 @@ def main(args):
 
     args.writer = make_writer(args,color=True)
     print(args.writer.log_dir)
-    args.id = args.writer.log_dir.split('runs/')[-1] + '_2'
+    args.id = args.writer.log_dir.split('learn_color/')[-1]
     
     device, _ = get_device(args)
     args.device = device
@@ -81,7 +87,7 @@ def main(args):
     elif args.renderer == 'nvr+':
         renderer = NVR_Renderer(args, args.device)
     
-    color_net = ConstantColor().to(args.device)
+    color_net = ColorNetv1().to(args.device)
     color_training(args,clip_model,net,latent_flow_network,renderer,color_net)
     
 if __name__=="__main__":
@@ -89,4 +95,5 @@ if __name__=="__main__":
     parser.add_argument("--color",type=str,default="red")
 
     args = parser.parse_args()
+    args.contrast_lambda = 0
     main(args)
