@@ -21,8 +21,8 @@ class NVR_Plus(nn.Module):
         
     def forward(self,voxels,final_composite,light_position):
         assert not self.training
-        assert final_composite.max() <= 1.0
-        assert final_composite.min() >= -1.0
+        assert final_composite.max() <= 1.0, "max is %s" % final_composite.max()
+        assert final_composite.min() >= -1.0, "min is %s" % final_composite.min()
 
         light_position = light_position.to(voxels.device)
         final_composite = final_composite.to(voxels.device)

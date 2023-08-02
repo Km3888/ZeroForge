@@ -45,15 +45,20 @@ class ColorNetv1(nn.Module):
     
     def __init__(self):
         super(ColorNetv1, self).__init__()
-        self.text_encoder_1 = nn.Linear(512, 512)
+        self.text_encoder_1 = nn.Linear(512, 1028)
         self.relu1 = nn.LeakyReLU(negative_slope=0.3)
-        self.text_encoder_2 = nn.Linear(512, 128)
-        
-
-        self.conv1 = nn.Conv3d(129, 128, 3, stride=1, padding=1, bias=True)
-        self.bn1 = nn.BatchNorm3d(128)
+        self.text_encoder_2 = nn.Linear(1028, 1028)
         self.relu2 = nn.LeakyReLU(negative_slope=0.3)
-        self.conv2 = nn.Conv3d(128, 3, 3, stride=1, padding=1, bias=True)
+        self.text_encoder_3 = nn.Linear(1028, 32)
+                
+
+        self.conv1 = nn.Conv3d(33, 128, 3, stride=1, padding=1, bias=True)
+        self.bn1 = nn.BatchNorm3d(128)
+        self.relu3 = nn.LeakyReLU(negative_slope=0.3)
+        self.conv2 = nn.Conv3d(128, 128, 3, stride=1, padding=1, bias=True)
+        self.relu4 = nn.LeakyReLU(negative_slope=0.3)
+        self.conv3 = nn.Conv3d(128, 3, 3, stride=1, padding=1, bias=True)
+        
         self.sigmoid = nn.Sigmoid()
     
     def forward(self,voxels,text_features):
@@ -62,7 +67,10 @@ class ColorNetv1(nn.Module):
         text_features = self.text_encoder_1(text_features)
         text_features = self.relu1(text_features)
         text_features = self.text_encoder_2(text_features)
-        text_features = text_features.view(-1,128,1,1,1)
+        text_features = self.relu2(text_features)
+        text_features = self.text_encoder_3(text_features)
+
+        text_features = text_features.view(-1,32,1,1,1)
         text_features = text_features.expand(-1,-1,128,128,128)
 
         voxels = voxels.unsqueeze(1)
@@ -70,8 +78,10 @@ class ColorNetv1(nn.Module):
 
         color_voxels = self.conv1(full_rep)
         # color_voxels = self.bn1(color_voxels)
-        color_voxels = self.relu2(color_voxels)
+        color_voxels = self.relu3(color_voxels)
         color_voxels = self.conv2(color_voxels)
+        color_voxels = self.relu4(color_voxels)
+        color_voxels = self.conv3(color_voxels)
         color_voxels = self.sigmoid(color_voxels)
         full_voxels = torch.concatenate([color_voxels,voxels],dim=1)
 

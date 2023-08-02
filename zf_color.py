@@ -38,26 +38,28 @@ def color_training(args,clip_model,net,latent_flow_model,renderer,color_net):
     zf_model = ZeroForge(args, clip_model, net, latent_flow_model,color_net, renderer, resizer, query_array)
     zf_model = nn.DataParallel(zf_model).to(args.device)
     
-    zf_optimizer = optim.Adam(zf_model.module.color_net.parameters(), lr=01e-5)    
+    zf_optimizer = optim.Adam(zf_model.module.color_net.parameters(), lr=01e-4,weight_decay=0)    
     zf_model.module.autoencoder.train()
     # 9 different colors
-    # colors = ['red','orange','yellow','green','blue','purple','pink','brown','black']
-    # color = random.choice(colors)
-    # color = 'red'
-    # color_array = ['%s %s' % (color,query_array[i]) for i in range(len(query_array))]
-    query_array = ['red airplane','green airplane','red airplane','green airplane','red airplane','green airplane']
-    text_features = get_text_embeddings(args,clip_model,query_array).detach()
+    all_colors = ['red','orange','yellow','green','blue','purple','pink','brown','black']
+
     for i in range(1000):
         with torch.cuda.amp.autocast():
+            colors_1 = random.sample(all_colors,4)
+            colors_2 = random.sample(all_colors,4)
+            query_array = ['%s airplane with %s wings' % (colors_1[i],colors_2[i]) for i in range(len(colors_1))]
+            text_features = get_text_embeddings(args,clip_model,query_array).detach()
             zf_optimizer.zero_grad()
             out_3d, im_samples, im_embs = zf_model(text_features)
+            out_3d.retain_grad()
             loss,similarity_loss = clip_loss(im_embs, text_features, args)
             os.makedirs(f'{args.log_dir}/{args.id}',exist_ok=True)
             # save im_samples
             im_samples_pil = im_samples.detach().cpu().squeeze()
             loss.backward()
             if not i%50:
-                save_image(im_samples_pil, os.path.join(os.getcwd(),'im_samples_%s_color=%s.png' % (i,color)))
+                save_image(im_samples_pil, os.path.join(os.getcwd(),'im_samples_%s_color=%s.png' % (i,''.join(x for x in colors_1))))
+                print('iter %s: loss=%s' % (i,similarity_loss.item()))
             zf_optimizer.step()
 
 def main(args):
@@ -95,5 +97,5 @@ if __name__=="__main__":
     parser.add_argument("--color",type=str,default="red")
 
     args = parser.parse_args()
-    args.contrast_lambda = 0
+    args.contrast_lambda = 0.1
     main(args)

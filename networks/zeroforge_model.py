@@ -38,15 +38,16 @@ class ZeroForge(nn.Module):
         query_points = p.expand(batch_size, *p.size())
             
         noise = torch.Tensor(batch_size, self.args.emb_dims).normal_().to(self.args.device)
+        noise = torch.zeros(batch_size, self.args.emb_dims).to(self.args.device)
         decoder_embs = self.latent_flow_model.sample(text_features.device,batch_size, noise=noise, cond_inputs=text_features)
         out_3d = self.autoencoder(decoder_embs, query_points).view(batch_size, voxel_size, voxel_size, voxel_size)
         if hard:
             out_3d_bin = (out_3d.detach() > self.args.threshold).float()
         else:
             out_3d_bin = torch.sigmoid(self.args.beta*(out_3d-self.args.threshold))#.clone()
-        out_3d_bin_color = self.color_net(out_3d_bin)
+        out_3d_bin_color = self.color_net(out_3d_bin,text_features)
 
-        ims,angles = self.renderer(out_3d_bin_color,angles)
+        ims = self.renderer(out_3d_bin_color)
         ims = self.resizer(ims.double())
         im_samples = ims.view(-1,3,224,224)
         
@@ -56,4 +57,4 @@ class ZeroForge(nn.Module):
             #baseline renderer gives 3 dimensions
             text_features=text_features.unsqueeze(1).expand(-1,3,-1).reshape(-1,512)
         
-        return out_3d_bin_color, im_samples, im_embs, angles
+        return out_3d_bin_color, im_samples, im_embs
